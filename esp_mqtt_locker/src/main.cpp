@@ -16,6 +16,8 @@ void make_message(byte* payload);
 const char* mqtt_server = "172.16.27.83"; //mqtt server
 const char* ssid = "LIIS";
 const char* password = "qw8J*883";
+const char* control_topic = "locker/control"; // to subscribe
+const char* feedback_topic = "locker/locker_status"; // to publish
 
 byte message [] = {0x8A, 0x01, 0x18, 0x11, 0x9B};
 byte recieved_data [5];
@@ -23,41 +25,41 @@ byte check_sum;
 WiFiClient espClient;
 PubSubClient client(espClient); //lib required for mqtt
 
-int LED = 02;
 void setup()
 {
   Serial.begin(115200);
   Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED, LOW);
   WiFi.begin(ssid, password);
   Serial.println("connected");
   client.setServer(mqtt_server, 1883);//connecting to mqtt server
   client.setCallback(callback);
-  //delay(5000);
+  delay(3000);
   connectmqtt();
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {   //callback includes topic and payload ( from which (topic) the payload is comming)
-  //Serial.print("Message arrived [");
-  //Serial.print(topic);
-  //Serial.print("] ");
+  /*  // DEBUG
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
   for (int i = 0; i < length; i++)
   {
     Serial.print(0x0 + char(payload[i]));
     //Serial.print(' ');
   }
   Serial.println();
+  */  // DEBUG
+
   make_message(payload);
   Serial1.write(message, sizeof(message));
   Serial1.read(recieved_data, 5);
-  if(recieved_data[3] == 0x11)  // successful unlocking
+  if(recieved_data[3] == 0x11)  // check is successful unlocking
   {  
-    client.publish("locker/locker_status", "open");
+    client.publish(feedback_topic, "open");
   }
   else 
   {
-    client.publish("locker/locker_status", "closed");
+    client.publish(feedback_topic, "closed");
   }
   
 }
@@ -71,7 +73,7 @@ void reconnect() {
       // Once connected, publish an announcement...
       client.publish("outTopic", "Nodemcu connected to MQTT");
       // ... and resubscribe
-       client.subscribe("locker/control");
+       client.subscribe(control_topic);
 
     } else {
       Serial.print("failed, rc=");
@@ -91,7 +93,7 @@ void connectmqtt()
     // Once connected, publish an announcement...
 
     // ... and resubscribe
-    client.subscribe("locker/control"); //topic=Demo
+    client.subscribe(control_topic); 
     client.publish("outTopic",  "connected to MQTT");
     client.publish("locker/locker_status", "check");
 
