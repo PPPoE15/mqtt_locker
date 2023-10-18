@@ -1,20 +1,8 @@
-/*
-  When you press the physical button connected to ESP, button state on the Webpage will be changed to ON.
-  You can send data from any sensor to Webpage, not only button.
-  Button  is connected between PIN D3 and GND.
-  При нажатии на физическую кнопку подключенную к ESP, состояние кнопки на Веб-странице изменится на "Включено".
-  Таким образом можно передавать данные с датчиков подключенных к ESP на веб-страницу.
-  Кнопка подключена между пинами D3 и GND. 
-  
-  Заметки ESPшника - Урок 5 - Веб-сервер.
-  By Mautoz Tech.  
-  Mautoz Tech https://www.youtube.com/channel/UCWN_KT_CAjGZQG5grHldL8w
-  Заметки ESPшника - https://www.youtube.com/channel/UCQAbEIaWFdARXKqcufV6y_g
-*/
 #ifdef ESP32
   #include <WiFi.h>
   #include <WiFiClient.h>
   #include <WebServer.h>
+  #include <WiFiAP.h>
   WebServer server(80);
 #else
   #include <ESP8266WiFi.h>
@@ -22,45 +10,96 @@
   #include <ESP8266WebServer.h>
   ESP8266WebServer server(80);
 #endif
-uint8_t button = 0; // Button  is connected between PIN D3 and GND
-
 const char* ssid     = "LIIS";
 const char* password = "qw8J*883";
+String input_ssid;
+String input_pass;
 
-void handleRoot()
-{
-  String webpage;
-  if(digitalRead(button)==HIGH){
-    webpage = "Button: OFF";
-  }
-  else{
-    webpage = "Button: ON";
-  }
-  webpage = "<html><meta http-equiv=\"refresh\" content=\"2\"> <body>"
-                + webpage + "</body></html>";
-  server.send(200, "text/html", webpage);
+char htmlResponse[3000];
+
+void handleRoot() {
+  snprintf ( htmlResponse, 3000,
+  "<!DOCTYPE html>\
+  <html lang=\"en\">\
+    <head>\
+      <meta charset=\"utf-8\">\
+      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+    </head>\
+    <body>\
+            <h1>Screen message</h1>\
+            <h2>SSID name</h2>\
+            <input type='text' id='ssid_id' size=3 autofocus>\
+            <h2>Password</h2>\
+            <input type='text' id='pass_id' size=3 autofocus>\
+            <div>\
+            <br><button id=\"connect_button\">connect</button>\
+            </div>\
+      <script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js\"></script>\    
+      <script>\
+        $('#connect_button').click(function(e){\
+          e.preventDefault();\
+          var ssid;\
+          var pass;\
+          ssid = $('#ssid_id').val();\
+          pass = $('#pass_id').val();\
+          $.get('/save?ssid=' + ssid, function(data){\
+            console.log(data);\
+          });\
+          $.get('/save?pass=' + pass, function(data){\
+            console.log(data);\
+          });\
+        });\  
+      </script>\
+    </body>\
+  </html>"); 
+  server.send ( 200, "text/html", htmlResponse );  
+  Serial.println("HANDLING ROOT");
 }
 
-void setup()
-{
+void handleSave() {
+  //Serial.println(server.args());
+
+  if (server.args()==1){
+    if (server.arg("ssid")!=""){
+      input_ssid = server.arg("ssid");
+      Serial.println("SSID:");
+      Serial.println(input_ssid);
+    }
+
+    if (server.arg("pass")!=""){
+      input_pass = server.arg("pass");
+      Serial.println("Pass:");
+      Serial.println(input_pass);
+    }
+  }  
+}
+
+void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+  // Start serial
   Serial.begin(115200);
-  pinMode(button, INPUT);
+  delay(10);
+  // Connecting to a WiFi network
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
   WiFi.begin(ssid, password);
-  Serial.print("Connecting...");
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500); 
+    delay(500);
     Serial.print(".");
   }
   Serial.println("");
-  Serial.println("Connected to WiFi");
-  Serial.print("IP address: ");
+  Serial.println("WiFi connected");  
+  Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
-  server.on("/", handleRoot);
+  server.on ( "/", handleRoot );
+  server.on ("/save", handleSave);
   server.begin();
-  Serial.println("HTTP server started");
-  Serial.println(WiFi.status());
+  Serial.println ( "HTTP server started" );
 }
 
-void loop(){
+void loop() {
   server.handleClient();
 }
