@@ -11,156 +11,238 @@
   ESP8266WebServer server(80);
 #endif
 
-const char* ssid     = "smart_locker";
-const char* password = "12345678";
+const char* ssid_AP     = "smart_locker";
+const char* password_AP = "12345678";
+const char* ssid     = "LIIS";
+const char* password = "qw8J*883";
 String input_ssid = "";
 String input_pass = "";
+IPAddress myIP;
 
-char htmlResponse[3000];
+String WifiScan(){
+  String content;
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+  Serial.println("Setup done");
 
+  Serial.println("Scan start");
 
-void handleRoot() {
-  snprintf ( htmlResponse, 3000,
-  "<!DOCTYPE html>\
-  <html lang=\"en\">\
-    <head>\
-      <meta charset=\"utf-8\">\
-      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
-    </head>\
-    <body>\
-            <h1>Screen message</h1>\
-            <h2>SSID name</h2>\
-            <input type='text' class='element' value='Znachenie' id='ssid_id' size=3 autofocus/>\
-            <div id='read'></div>\
-            <h2>Password</h2>\
-            <input type='text' id='pass_id' size=3 autofocus>\
-            <div>\
-            <br><button id=\"connect_button\">connect</button>\
-            </div>\
-      <script>\
-        $(function() {\
-          function readValue(value) {\
-            return $(value).val();\
-          }\
-          $('#read').html( readValue('.element') );\
-          $('.element').keyup(function(){\
-            $('#read').html( readValue('.element') );\
-          });\
-        });\
-      </script>\
-    </body>\
-  </html>"); 
-  server.send ( 200, "text/html", htmlResponse );  
-  Serial.println("HANDLING ROOT");
+  // WiFi.scanNetworks will return the number of networks found.
+  int n = WiFi.scanNetworks();
+  Serial.println("Scan done");
+    content += "Scan done <br>";
+  if (n == 0) {
+      Serial.println("no networks found");
+        content += "No networks found <br>";
+  } else {
+      Serial.println("Networks list:");
+        content += "Networks list: <br>";
+      Serial.println("Nr | SSID                             | RSSI | CH | Encryption");
+        content += "Nr | SSID                             | RSSI | CH | Encryption <br>";
+      for (int i = 0; i < n; ++i) {
+          // Print SSID and RSSI for each network found
+          Serial.printf("%2d",i + 1);
+            content += Serial.printf("%2d",i + 1);
+          Serial.print(" | ");
+            content += "Networks list: <br>";
+          Serial.printf("%-32.32s", WiFi.SSID(i).c_str());
+            content += "Networks list: <br>";
+          Serial.print(" | ");
+            content += "Networks list: <br>";
+          Serial.printf("%4d", WiFi.RSSI(i));
+            content += "Networks list: <br>";
+          Serial.print(" | ");
+            content += "Networks list: <br>";
+          Serial.printf("%2d", WiFi.channel(i));
+            content += "Networks list: <br>";
+          Serial.print(" | ");
+            content += "Networks list: <br>";
+          switch (WiFi.encryptionType(i))
+          {
+          case WIFI_AUTH_OPEN:
+              Serial.print("open");
+              break;
+          case WIFI_AUTH_WEP:
+              Serial.print("WEP");
+              break;
+          case WIFI_AUTH_WPA_PSK:
+              Serial.print("WPA");
+              break;
+          case WIFI_AUTH_WPA2_PSK:
+              Serial.print("WPA2");
+              break;
+          case WIFI_AUTH_WPA_WPA2_PSK:
+              Serial.print("WPA+WPA2");
+              break;
+          case WIFI_AUTH_WPA2_ENTERPRISE:
+              Serial.print("WPA2-EAP");
+              break;
+          case WIFI_AUTH_WPA3_PSK:
+              Serial.print("WPA3");
+              break;
+          case WIFI_AUTH_WPA2_WPA3_PSK:
+              Serial.print("WPA2+WPA3");
+              break;
+          case WIFI_AUTH_WAPI_PSK:
+              Serial.print("WAPI");
+              break;
+          default:
+              Serial.print("unknown");
+          }
+          Serial.println();
+          delay(10);
+      }
+  }
+  Serial.println("");
+  content += "<br>";
+
+  // Delete the scan result to free memory for code below.
+  WiFi.scanDelete();
+
+  return content;
 }
 
-void handleWork(){
-  snprintf(htmlResponse, 100, "Hello");
-}
+bool doConnect(String ssid, String pass){
+  WiFi.disconnect(true, true);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, pass);
+  Serial.println("");
 
-void handleSave() {
-  //Serial.println(server.args());
-  if (server.arg("ssid")!=""){
-    input_ssid = server.arg("ssid");
-    Serial.println("SSID:");
-    Serial.println(input_ssid);
-  }
-  if (server.arg("pass")!=""){
-    input_pass = server.arg("pass");
-    Serial.println("Pass:");
-    Serial.println(input_pass);
-  }
-
-  if (input_ssid != "" && input_pass != ""){
-    // Connecting to a WiFi network
-    Serial.println();
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(input_ssid);
-    WiFi.begin(input_ssid, input_pass);
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      Serial.print(".");
+  // Wait connection for 10 sec
+  int msConnection_counter = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    msConnection_counter++;
+    if (msConnection_counter > 20){
+      return false;
     }
-    Serial.println("");
-    Serial.println("WiFi connected");  
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-    server.on ( "/", handleWork );
-    //server.on ("/save", handleSave);
-    Serial.println ( "HTTP server started" );
-  } 
+  }
+  Serial.println("\n");
+  Serial.print("Connected to ");
+  Serial.println(ssid);
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  return true;
 }
 
-void setup() {
-  // Start serial
-  Serial.begin(115200);
-  delay(10);
+//Check if header is present and correct
+bool is_authentified() {
+  Serial.println("Enter is_authentified");
+  if (server.hasHeader("Cookie")) {
+    Serial.print("Found cookie: ");
+    String cookie = server.header("Cookie");
+    Serial.println(cookie);
+    if (cookie.indexOf("ESPSESSIONID=1") != -1) {
+      Serial.println("Authentification Successful");
+      return true;
+    }
+  }
+  Serial.println("Authentification Failed");
+  return false;
+}
 
-  Serial.println();
+//login page, also called for disconnect
+void handleLogin() {
+  String msg;
+  if (server.hasArg("DISCONNECT")) {
+    Serial.println("Disconnection");
+    server.sendHeader("Location", "/login");
+    server.sendHeader("Cache-Control", "no-cache");
+    server.sendHeader("Set-Cookie", "ESPSESSIONID=0");
+    server.send(301);
+    return;
+  }
+  if (server.hasArg("USERNAME") && server.hasArg("PASSWORD")) {
+    input_ssid = server.arg("USERNAME");
+    input_pass = server.arg("PASSWORD");
+
+    if (doConnect(input_ssid, input_pass)) {
+      server.sendHeader("Location", "/");
+      server.sendHeader("Cache-Control", "no-cache");
+      server.sendHeader("Set-Cookie", "ESPSESSIONID=1");
+      server.send(301);
+      Serial.println("Log in Successful");
+      return;
+    }
+    msg = "Wrong username/password! try again.";
+    Serial.println("Log in Failed");
+  }
+  String content = "<html><body><form action='/login' method='POST'>To log in, please use : admin/admin<br>";
+  content += "User:<input type='text' name='USERNAME' placeholder='user name'><br>";
+  content += "Password:<input type='password' name='PASSWORD' placeholder='password'><br>";
+  content += "<input type='submit' name='SUBMIT' value='Submit'></form>" + msg + "<br>";
+  content += "You also can go <a href='/inline'>here</a></body></html>";
+  server.send(200, "text/html", content);
+}
+
+//root page can be accessed only if authentification is ok
+void handleRoot() {
+  Serial.println("Enter handleRoot");
+  String header;
+  if (!is_authentified()) {
+    server.sendHeader("Location", "/login");
+    server.sendHeader("Cache-Control", "no-cache");
+    server.send(301);
+    return;
+  }
+  String content = "<html><body><H2>hello, you successfully connected to esp8266!</H2><br>";
+ 
+  content += "You can access this page until you <a href=\"/login?DISCONNECT=YES\">disconnect</a></body></html>";
+  server.send(200, "text/html", content);
+}
+
+//no need authentification
+void handleNotFound() {
+  String message = "File Not Found\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += (server.method() == HTTP_GET) ? "GET" : "POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+  for (uint8_t i = 0; i < server.args(); i++) {
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  }
+  server.send(404, "text/plain", message);
+}
+
+void setup(void) {
+  Serial.begin(115200);
+  //WiFi.mode(WIFI_STA);
+  //WiFi.begin(ssid_AP, password_AP);
+  Serial.println("");
   Serial.println("Configuring access point...");
 
   // You can remove the password parameter if you want the AP to be open.
   // a valid password must have more than 7 characters
-  if (!WiFi.softAP(ssid, password)) {
+  if (!WiFi.softAP(ssid_AP, password_AP)) {
     log_e("Soft AP creation failed.");
     while(1);
   }
-  IPAddress myIP = WiFi.softAPIP();
+  myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(myIP);
-  server.on ( "/", handleRoot );
-  server.on ("/save", handleSave);
+
+  server.on("/", handleRoot);
+  server.on("/login", handleLogin);
+  server.on("/inline", []() {
+    server.send(200, "text/plain", "this works without need of authentification");
+  });
+
+  server.onNotFound(handleNotFound);
+  //here the list of headers to be recorded
+  const char * headerkeys[] = {"User-Agent", "Cookie"} ;
+  size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
+  //ask server to track these headers
+  server.collectHeaders(headerkeys, headerkeyssize);
   server.begin();
-  Serial.println("Server started");
-
+  Serial.println("HTTP server started");
 }
 
-void loop() {
+void loop(void) {
   server.handleClient();
+  delay(2);//allow the cpu to switch to other tasks
 }
-
-
-
-
-
-/*
-void handleRoot() {
-  snprintf ( htmlResponse, 3000,
-  "<!DOCTYPE html>\
-  <html lang=\"en\">\
-    <head>\
-      <meta charset=\"utf-8\">\
-      <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
-    </head>\
-    <body>\
-            <h1>Screen message</h1>\
-            <h2>SSID name</h2>\
-            <input type='text' id='ssid_id' size=3 autofocus>\
-            <h2>Password</h2>\
-            <input type='text' id='pass_id' size=3 autofocus>\
-            <div>\
-            <br><button id=\"connect_button\">connect</button>\
-            </div>\
-      <script src=\"https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js\"></script>\    
-      <script>\
-        $('#connect_button').click(function(e){\
-          e.preventDefault();\
-          var ssid;\
-          var pass;\
-          ssid = $('#ssid_id').val();\
-          pass = $('#pass_id').val();\
-          $.get('/save?ssid=' + ssid, function(data){\
-            console.log(data);\
-          });\
-          $.get('/save?pass=' + pass, function(data){\
-            console.log(data);\
-          });\
-        });\  
-      </script>\
-    </body>\
-  </html>"); 
-  server.send ( 200, "text/html", htmlResponse );  
-  Serial.println("HANDLING ROOT");
-}
-*/
