@@ -3,6 +3,7 @@
   #include <WiFiClient.h>
   #include <WebServer.h>
   #include <WiFiAP.h>
+  #include <EEPROM.h>
   WebServer server(80);
 #else
   #include <ESP8266WiFi.h>
@@ -13,11 +14,21 @@
 
 const char* ssid_AP     = "smart_locker";
 const char* password_AP = "12345678";
-const char* ssid     = "LIIS";
-const char* password = "qw8J*883";
-String input_ssid = "";
-String input_pass = "";
-IPAddress myIP;
+//const char* ssid     = "LIIS";
+//const char* password = "qw8J*883";
+struct WiFiPair {
+  String input_ssid = "";
+  String input_pass = "";
+};
+
+WiFiPair inputPair;
+
+
+
+void saveEEPROMData() {
+    EEPROM.commit();
+    EEPROM.end();  // Освобождение ресурсов
+}
 
 String WifiScan(){
   String content;
@@ -104,18 +115,20 @@ String WifiScan(){
 }
 
 bool doConnect(String ssid, String pass){
-  WiFi.disconnect(true, true);
-  WiFi.mode(WIFI_STA);
+  Serial.println("trying to connect");
+  //WiFi.disconnect(true, true);
+  //WiFi.mode();
   WiFi.begin(ssid, pass);
+  WiFi.setAutoReconnect(true);
   Serial.println("");
 
-  // Wait connection for 10 sec
+  // Wait connection for 30 sec
   int msConnection_counter = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
     msConnection_counter++;
-    if (msConnection_counter > 20){
+    if (msConnection_counter > 60){
       return false;
     }
   }
@@ -155,15 +168,17 @@ void handleLogin() {
     return;
   }
   if (server.hasArg("USERNAME") && server.hasArg("PASSWORD")) {
-    input_ssid = server.arg("USERNAME");
-    input_pass = server.arg("PASSWORD");
+    inputPair.input_ssid = server.arg("USERNAME");
+    inputPair.input_pass = server.arg("PASSWORD");
 
-    if (doConnect(input_ssid, input_pass)) {
+    if (doConnect(inputPair.input_ssid, inputPair.input_pass)) {
       server.sendHeader("Location", "/");
       server.sendHeader("Cache-Control", "no-cache");
       server.sendHeader("Set-Cookie", "ESPSESSIONID=1");
       server.send(301);
       Serial.println("Log in Successful");
+      EEPROM.put(0, inputPair);
+      saveEEPROMData();
       return;
     }
     msg = "Wrong username/password! try again.";
@@ -211,20 +226,26 @@ void handleNotFound() {
 
 void setup(void) {
   Serial.begin(115200);
-  //WiFi.mode(WIFI_STA);
-  //WiFi.begin(ssid_AP, password_AP);
-  Serial.println("");
-  Serial.println("Configuring access point...");
+  EEPROM.begin(200);
+  EEPROM.get(0, inputPair);
+  Serial.println(inputPair.input_ssid);
+  Serial.println(inputPair.input_pass);
+  if (doConnect(inputPair.input_ssid, inputPair.input_ssid)){ // successfully connected to wi-fi
 
-  // You can remove the password parameter if you want the AP to be open.
-  // a valid password must have more than 7 characters
-  if (!WiFi.softAP(ssid_AP, password_AP)) {
-    log_e("Soft AP creation failed.");
-    while(1);
   }
-  myIP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(myIP);
+  else{
+    EEPROM.put(0, 0);
+    saveEEPROMData();
+    Serial.println("\n\nConfiguring access point...");
+    WiFi.disconnect();
+    WiFi.eraseAP();
+    if (!WiFi.softAP(ssid_AP, password_AP)) {
+      log_e("Soft AP creation failed.");
+      while(1);
+    }
+    Serial.print("AP IP address: ");
+    Serial.println(WiFi.softAPIP());
+  }
 
   server.on("/", handleRoot);
   server.on("/login", handleLogin);
