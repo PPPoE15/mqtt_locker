@@ -12,6 +12,8 @@
   ESP8266WebServer server(80);
 #endif
 
+#define resetWiFiButton 21
+
 const char* ssid_AP     = "smart_locker";
 const char* password_AP = "12345678";
 //const char* ssid     = "LIIS";
@@ -21,21 +23,54 @@ struct WiFiPair {
   String input_pass = "";
   bool isValid;
 };
-
 WiFiPair inputPair;
+void resetWiFiData();
+class button {
+  public:
+    button (byte pin) {
+      _pin = pin;
+      pinMode(_pin, INPUT_PULLUP);
+    }
+    bool click() {
+      bool btnState = digitalRead(_pin);
+      if (!btnState && !_flag && millis() - _tmr >= 100) {
+        _flag = true;
+        _tmr = millis();
+        return true;
+      }
+      if (!btnState && _flag && millis() - _tmr >= 3000) {
+        _tmr = millis ();
+        resetWiFiData();
+        return true;
+      }
+      if (btnState && _flag) {
+        _flag = false;
+        _tmr = millis();
+      }
+      return false;
+    }
+  private:
+    byte _pin;
+    uint32_t _tmr;
+    bool _flag;
+};
+button resetButton(resetWiFiButton);
+uint32_t serverTimer, buttonTimer, resetTimer = 0;
 
-
-
-void saveEEPROMData() {
-  Serial.println("SAVE THIS:");
-  Serial.println("EEPROM SSID:");
-  Serial.println(inputPair.input_ssid);
-  Serial.println("EEPROM PASS:");
-  Serial.println(inputPair.input_pass);
-  Serial.println("EEPROM isValid:");
-  Serial.println(inputPair.isValid);
+void offFlagValid() { // call if need to off valid flag in SSID PASS pair struct
+  Serial.println("NOT VALID");
+  inputPair.isValid = false;
+  EEPROM.put(0,inputPair);
   EEPROM.commit();
     //EEPROM.end();  // Освобождение ресурсов
+}
+
+void resetWiFiData(){
+  Serial.println("reset SSID and PASSWORD");
+  offFlagValid();
+  digitalWrite(LED_BUILTIN, HIGH);   // зажигаем светодиод
+  delay(100);              // ждем 0.1 секунду
+  digitalWrite(LED_BUILTIN, LOW);    // выключаем светодиод
 }
 
 String WifiScan(){
@@ -128,8 +163,7 @@ bool doConnect(WiFiPair inputPair){
     Serial.println("Not valid SSID or PASSWORD");
     return false;
   }
-  //WiFi.disconnect(true, true);
-  //WiFi.mode();
+
   WiFi.begin(inputPair.input_ssid, inputPair.input_pass);
   WiFi.setAutoReconnect(true);
   Serial.println("");
@@ -142,6 +176,7 @@ bool doConnect(WiFiPair inputPair){
     msConnection_counter++;
     if (msConnection_counter > 60){
       Serial.println("ERROR while connecting");
+      offFlagValid();
       return false;
     }
   }
@@ -168,8 +203,8 @@ void handleLogin() {
     inputPair.input_ssid = server.arg("USERNAME");
     inputPair.input_pass = server.arg("PASSWORD");
     inputPair.isValid = true;
-    EEPROM.put(0, inputPair);
-    saveEEPROMData();
+    EEPROM.put(0, inputPair); // got SSID and PASSWORD, now remember
+    EEPROM.commit();
 
     if (doConnect(inputPair)) {
       server.sendHeader("Location", "/");
@@ -179,7 +214,7 @@ void handleLogin() {
       Serial.println("Log in Successful");
       return;
     }
-    msg = "Wrong username/password! try again.";
+    msg = "Wrong ssid/password! try again.";
     Serial.println("Log in Failed");
   }
   String content = "<html><body><form action='/login' method='POST'>To log in, please use : admin/admin<br>";
@@ -200,9 +235,9 @@ void handleRoot() {
     server.send(301);
     return;
   }
-  String content = "<html><body><H2>hello, you successfully connected to esp8266!</H2><br>";
+  String content = "<html><body><H2>You successfully connected to Wi-Fi!</H2><br>";
  
-  content += "You can access this page until you <a href=\"/login?DISCONNECT=YES\">disconnect</a></body></html>";
+  content += "To reset Wi-Fi settings push and hold reset button for 3 sec</body></html>";
   server.send(200, "text/html", content);
 }
 
@@ -223,24 +258,18 @@ void handleNotFound() {
 }
 
 void setup(void) {
+  pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
   while(!Serial) {}
   EEPROM.begin(512);
   EEPROM.get(0, inputPair);
-  Serial.println("EEPROM SSID:");
+  Serial.println("Current SSID:");
   Serial.println(inputPair.input_ssid);
-  Serial.println("EEPROM PASS:");
+  Serial.println("Current PASS:");
   Serial.println(inputPair.input_pass);
-  Serial.println("EEPROM isValid:");
-  Serial.println(inputPair.isValid);
 
   if (!doConnect(inputPair)){ // successfully connected to wi-fi
-    inputPair.isValid = false;
-    EEPROM.put(0,inputPair);
-    saveEEPROMData();
     Serial.println("\n\nConfiguring access point...");
-    //WiFi.disconnect();
-    //WiFi.eraseAP();
     if (!WiFi.softAP(ssid_AP, password_AP)) {
       log_e("Soft AP creation failed.");
       while(1);
@@ -248,7 +277,6 @@ void setup(void) {
     Serial.print("AP IP address: ");
     Serial.println(WiFi.softAPIP());
   }
-
 
   server.on("/", handleRoot);
   server.on("/login", handleLogin);
@@ -267,6 +295,13 @@ void setup(void) {
 }
 
 void loop(void) {
-  server.handleClient();
-  delay(2);//allow the cpu to switch to other tasks
+  if (millis() - serverTimer >= 100) {   // 10 times at second - server handler
+    serverTimer = millis();              // сброс таймера
+    server.handleClient();
+  }
+
+  if (millis() - buttonTimer >= 500) {   // 2 times at second - reset button handler
+    buttonTimer = millis();              // сброс таймера
+    resetButton.click();
+  }
 }
