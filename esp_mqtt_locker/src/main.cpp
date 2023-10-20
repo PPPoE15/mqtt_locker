@@ -19,6 +19,7 @@ const char* password_AP = "12345678";
 struct WiFiPair {
   String input_ssid = "";
   String input_pass = "";
+  bool isValid;
 };
 
 WiFiPair inputPair;
@@ -26,8 +27,15 @@ WiFiPair inputPair;
 
 
 void saveEEPROMData() {
-    EEPROM.commit();
-    EEPROM.end();  // Освобождение ресурсов
+  Serial.println("SAVE THIS:");
+  Serial.println("EEPROM SSID:");
+  Serial.println(inputPair.input_ssid);
+  Serial.println("EEPROM PASS:");
+  Serial.println(inputPair.input_pass);
+  Serial.println("EEPROM isValid:");
+  Serial.println(inputPair.isValid);
+  EEPROM.commit();
+    //EEPROM.end();  // Освобождение ресурсов
 }
 
 String WifiScan(){
@@ -114,11 +122,15 @@ String WifiScan(){
   return content;
 }
 
-bool doConnect(String ssid, String pass){
-  Serial.println("trying to connect");
+bool doConnect(WiFiPair inputPair){
+  Serial.println("Trying to connect...");
+  if(!inputPair.isValid){
+    Serial.println("Not valid SSID or PASSWORD");
+    return false;
+  }
   //WiFi.disconnect(true, true);
   //WiFi.mode();
-  WiFi.begin(ssid, pass);
+  WiFi.begin(inputPair.input_ssid, inputPair.input_pass);
   WiFi.setAutoReconnect(true);
   Serial.println("");
 
@@ -129,31 +141,16 @@ bool doConnect(String ssid, String pass){
     Serial.print(".");
     msConnection_counter++;
     if (msConnection_counter > 60){
+      Serial.println("ERROR while connecting");
       return false;
     }
   }
   Serial.println("\n");
   Serial.print("Connected to ");
-  Serial.println(ssid);
+  Serial.println(inputPair.input_ssid);
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
   return true;
-}
-
-//Check if header is present and correct
-bool is_authentified() {
-  Serial.println("Enter is_authentified");
-  if (server.hasHeader("Cookie")) {
-    Serial.print("Found cookie: ");
-    String cookie = server.header("Cookie");
-    Serial.println(cookie);
-    if (cookie.indexOf("ESPSESSIONID=1") != -1) {
-      Serial.println("Authentification Successful");
-      return true;
-    }
-  }
-  Serial.println("Authentification Failed");
-  return false;
 }
 
 //login page, also called for disconnect
@@ -170,15 +167,16 @@ void handleLogin() {
   if (server.hasArg("USERNAME") && server.hasArg("PASSWORD")) {
     inputPair.input_ssid = server.arg("USERNAME");
     inputPair.input_pass = server.arg("PASSWORD");
+    inputPair.isValid = true;
+    EEPROM.put(0, inputPair);
+    saveEEPROMData();
 
-    if (doConnect(inputPair.input_ssid, inputPair.input_pass)) {
+    if (doConnect(inputPair)) {
       server.sendHeader("Location", "/");
       server.sendHeader("Cache-Control", "no-cache");
       server.sendHeader("Set-Cookie", "ESPSESSIONID=1");
       server.send(301);
       Serial.println("Log in Successful");
-      EEPROM.put(0, inputPair);
-      saveEEPROMData();
       return;
     }
     msg = "Wrong username/password! try again.";
@@ -196,7 +194,7 @@ void handleLogin() {
 void handleRoot() {
   Serial.println("Enter handleRoot");
   String header;
-  if (!is_authentified()) {
+  if (!inputPair.isValid) {
     server.sendHeader("Location", "/login");
     server.sendHeader("Cache-Control", "no-cache");
     server.send(301);
@@ -226,19 +224,23 @@ void handleNotFound() {
 
 void setup(void) {
   Serial.begin(115200);
-  EEPROM.begin(200);
+  while(!Serial) {}
+  EEPROM.begin(512);
   EEPROM.get(0, inputPair);
+  Serial.println("EEPROM SSID:");
   Serial.println(inputPair.input_ssid);
+  Serial.println("EEPROM PASS:");
   Serial.println(inputPair.input_pass);
-  if (doConnect(inputPair.input_ssid, inputPair.input_ssid)){ // successfully connected to wi-fi
+  Serial.println("EEPROM isValid:");
+  Serial.println(inputPair.isValid);
 
-  }
-  else{
-    EEPROM.put(0, 0);
+  if (!doConnect(inputPair)){ // successfully connected to wi-fi
+    inputPair.isValid = false;
+    EEPROM.put(0,inputPair);
     saveEEPROMData();
     Serial.println("\n\nConfiguring access point...");
-    WiFi.disconnect();
-    WiFi.eraseAP();
+    //WiFi.disconnect();
+    //WiFi.eraseAP();
     if (!WiFi.softAP(ssid_AP, password_AP)) {
       log_e("Soft AP creation failed.");
       while(1);
@@ -246,6 +248,7 @@ void setup(void) {
     Serial.print("AP IP address: ");
     Serial.println(WiFi.softAPIP());
   }
+
 
   server.on("/", handleRoot);
   server.on("/login", handleLogin);
