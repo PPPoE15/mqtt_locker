@@ -1,16 +1,14 @@
 #ifdef ESP32
   #include <WiFi.h>
-  #include <WiFiClient.h>
   #include <WebServer.h>
-  //#include <WiFiAP.h>
-  #include <EEPROM.h>
   WebServer server(80);
 #else
   #include <ESP8266WiFi.h>
-  #include <WiFiClient.h>
   #include <ESP8266WebServer.h>
   ESP8266WebServer server(80);
 #endif
+
+#include <EEPROM.h>
 
 #ifndef LED_BUILTIN
   #define LED_BUILTIN 4
@@ -74,10 +72,9 @@ class button {
 
 WiFiData inputData;
 button resetButton(resetWiFiButton);
-const char* ssid_AP     = "smart_locker";
-const char* password_AP = "12345678";
-//const char* ssid     = "LIIS";
-//const char* password = "qw8J*883";
+const char* ssid_AP     = "smart_locker";  //office ssid: LIIS
+const char* password_AP = "12345678";  //office password: qw8J*883
+
 uint32_t serverTimer, buttonTimer, resetTimer = 0;
 
 
