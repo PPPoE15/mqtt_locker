@@ -20,7 +20,7 @@ struct WiFiData {
   String input_ssid = "";
   String input_pass = "";
   bool isValid;
-};
+} inputData;
 
 
 void offFlagValid();
@@ -70,7 +70,7 @@ class button {
 };
 
 
-WiFiData inputData;
+//WiFiData inputData;
 button resetButton(resetWiFiButton);
 const char* ssid_AP     = "smart_locker";  //office ssid: LIIS
 const char* password_AP = "12345678";  //office password: qw8J*883
@@ -79,7 +79,7 @@ uint32_t serverTimer, buttonTimer, resetTimer = 0;
 
 
 void offFlagValid() { // call if need to off valid flag in SSID PASS pair struct
-  Serial.println("NOT VALID");
+  //Serial.println("NOT VALID");
   inputData.isValid = false;
   EEPROM.put(0,inputData);
   EEPROM.commit();
@@ -118,14 +118,6 @@ bool doConnect(WiFiData inputData){
 
 void handleLogin() { //login page, also called for disconnect
   String msg;
-  if (server.hasArg("DISCONNECT")) {
-    Serial.println("Disconnection");
-    server.sendHeader("Location", "/login");
-    server.sendHeader("Cache-Control", "no-cache");
-    server.sendHeader("Set-Cookie", "ESPSESSIONID=0");
-    server.send(301);
-    return;
-  }
   if (server.hasArg("SSID") && server.hasArg("PASSWORD")) {
     inputData.input_ssid = server.arg("SSID");
     inputData.input_pass = server.arg("PASSWORD");
@@ -135,8 +127,6 @@ void handleLogin() { //login page, also called for disconnect
 
     if (doConnect(inputData)) {
       server.sendHeader("Location", "/");
-      server.sendHeader("Cache-Control", "no-cache");
-      server.sendHeader("Set-Cookie", "ESPSESSIONID=1");
       server.send(301);
       Serial.println("Log in Successful");
       return;
@@ -144,7 +134,7 @@ void handleLogin() { //login page, also called for disconnect
     msg = "Wrong ssid/password! try again.";
     Serial.println("Log in Failed");
   }
-  String content = "<html><body><form action='/login' method='POST'>To log in, please use : admin/admin<br>";
+  String content = "<html><body><form action='/login' method='POST'><br>";
   content += "SSID name:<input type='text' name='SSID' placeholder='SSID'><br>";
   content += "Password:<input type='password' name='PASSWORD' placeholder='password'><br>";
   content += "<input type='submit' name='SUBMIT' value='Submit'></form>" + msg + "<br>";
@@ -155,10 +145,8 @@ void handleLogin() { //login page, also called for disconnect
 
 void handleRoot() { //root page can be accessed only if authentification is ok
   Serial.println("Enter handleRoot");
-  String header;
   if (!inputData.isValid) {
     server.sendHeader("Location", "/login");
-    server.sendHeader("Cache-Control", "no-cache");
     server.send(301);
     return;
   }
