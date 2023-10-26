@@ -1,34 +1,22 @@
 #include "WiFiDevice.h"
-//#include <EEPROM.h>
 
-
+WiFiDevice SmartLocker;
 
 void setup(void){
   Serial.begin(115200);
+  SmartLocker.Init("smart_locker", "12345678");
   
 
-
-  delay(500);
-
-  Serial.println("BEGIN");
-
-  delay(500);
-
-  
-  
+  Serial.println("LOOP");
 }
 
 
 
 void loop(void){
-  WiFiDevice SmartLocker("smart_locker_wifi", "12345678");
-  Serial.println("LOOP");  
-  while(true){
-      SmartLocker.serverLoop();
-      delay(2);
-  }
-  delay(500);
-  
+
+    
+  SmartLocker.serverLoop();
+  delay(2);
   
 
 }
