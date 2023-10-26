@@ -26,14 +26,13 @@ class WiFiDevice{
         WiFiDataStruct inputData;
 
         WebServer _server;
-        const char* ssid_AP     = "smart_locker";  //office ssid: LIIS
-        const char* password_AP = "12345678";  //office password: qw8J*883
+        //const char* ssid_AP     = "smart_locker";  //office ssid: LIIS
+        //const char* password_AP = "12345678";  //office password: qw8J*883
 
-        WiFiDevice(WiFiDataStruct _WiFiData, char* ssid_AP, const char* password_AP) : _server(80) { // constructor
-             esp_err_t ret;
-            // Initialize NVS.
-            ret = nvs_flash_init();
-            inputData = _WiFiData;
+        WiFiDevice(char* ssid_AP, const char* password_AP) : _server(80) { // constructor
+
+            EEPROM.begin(512);
+            EEPROM.get(0, inputData);
             Serial.println("Current SSID:");
             Serial.println(inputData.input_ssid);
             Serial.println("Current PASS:");
@@ -66,37 +65,25 @@ class WiFiDevice{
         }
 
         void serverLoop(void) {
+            //_server.handleClient();
+            //resetButton.click(inputData);
+            
             uint32_t serverTimer, buttonTimer;
-            while(true){
-                if (millis() - serverTimer >= 100) {   // 10 times at second - server handler
-                    serverTimer = millis();            
-                    _server.handleClient();
-                }
-                if (millis() - buttonTimer >= 500) {   // 2 times at second - reset button handler
-                    buttonTimer = millis();             
-                    resetButton.click(inputData);
-                }
+            if (millis() - serverTimer >= 100) {   // 10 times at second - server handler
+                serverTimer = millis();            
+                _server.handleClient();
             }
+            if (millis() - buttonTimer >= 500) {   // 2 times at second - reset button handler
+                buttonTimer = millis();             
+                resetButton.click(inputData);
+            }
+            
+            
         }
 
    
 
     private:
-       
-    /*
-        static WiFiDataStruct setup_EEPROM(void){
-            EEPROMClass WiFiState("");
-            WiFiState.begin(512);
-            if(!WiFiState.begin(0x500)){
-                Serial.println("Failed to initialise NAMES");
-                Serial.println("Restarting...");
-                delay(1000);
-                ESP.restart();
-            }
-            WiFiDataStruct _inputData;
-            EEPROM.get(0, _inputData);
-            return(_inputData);
-        }*/
 
         static void offFlagValid(WiFiDataStruct _inputData) { // call if need to off valid flag in SSID PASS pair struct
             //Serial.println("NOT VALID");
