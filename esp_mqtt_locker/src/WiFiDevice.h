@@ -1,3 +1,18 @@
+/*
+    WiFiDevice.h - realize functionality of a Wi-Fi device on ESP32 board. 
+    Support only one simultaneous WiFiDevice class object.
+    Use the library to create a device with the following functionality:
+        1. After the first startup or reset the device creates access point.
+        2. You should to set SSID name, password and other settings by connecting to the AP via 192.168.4.1. 
+        3. Then the device will save settings in the EEPROM and connect to an existing Wi-Fi network.
+        4. Even after a reboot the device will connect to Wi-Fi. 
+        5. To reset the settings pull resetWiFiButton pin to the ground for 3 seconds until the LED_BUILTIN led flashes, then restart the device.
+    How to use the ibrary:
+        1. Create a WiFiDevice class object.
+        2. Call the Init method and set main settings.
+        3. 
+*/
+
 #pragma once
 
 #include <WiFi.h>
@@ -9,7 +24,10 @@
   #define LED_BUILTIN 4
 #endif
 
-#define resetWiFiButton 21
+
+#ifndef resetWiFiButton
+    #define resetWiFiButton 21
+#endif
 
 
 struct WiFiDataStruct {
@@ -25,7 +43,8 @@ class WiFiDevice{
         WebServer _server;
         WiFiDevice();
         void Init(char* ssid_AP, char* password_AP);
-        void serverLoop(void);
+        void serverLoop();
+        void addHandler(Uri uri, WebServer::THandlerFunction Handler);
 
     private:
         static void offFlagValid(WiFiDataStruct _inputData);

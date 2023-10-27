@@ -39,7 +39,11 @@ void WiFiDevice::Init(char* ssid_AP, char* password_AP){
     Serial.println("HTTP server started");
 }
 
-void WiFiDevice::serverLoop(void) {
+void WiFiDevice::addHandler(Uri uri, WebServer::THandlerFunction Handler){
+    _server.on(uri, Handler);
+}
+
+void WiFiDevice::serverLoop() {
     uint32_t serverTimer, buttonTimer;
     if (millis() - serverTimer >= 100) {   // 10 times at second - server handler
         serverTimer = millis();            
