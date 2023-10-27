@@ -1,29 +1,28 @@
-#include <Arduino.h>
-#include <string.h>
-#define RXD2 18
-#define TXD2 17
+#include "WiFiDevice.h"
 
-void setup() {
-  Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
-  Serial.begin(9600);
-  pinMode(LED_BUILTIN, OUTPUT);
+
+WiFiDevice SmartLocker;
+
+void infoHandler(){
+  SmartLocker._server.send(200, "text/plain", "info handler: little bird says 'tweet'");
 }
 
-byte message_unlock [] = {0x8A, 0x01, 0x01, 0x11, 0x9B};
-byte recieved_data [5];
-char check_data [5];
-
-void loop() {                     
-  Serial1.write(message_unlock, sizeof(message_unlock));
-  Serial1.read(recieved_data, 5);
-
-
-  if(recieved_data[3] == 0x11){  // successful unlocking
-    digitalWrite(LED_BUILTIN, HIGH);  // turn the LED on (HIGH is the voltage level)
-    delay(1000);                      // wait for a second
-    digitalWrite(LED_BUILTIN, LOW);   // turn the LED off by making the voltage LOW
-  }
+void setup(){
+  Serial.begin(115200);
+  SmartLocker.Init("smart_locker", "12345678");
+  SmartLocker.addHandler("/info", infoHandler);
   
-  delay(1000); 
-               
+
+  Serial.println("LOOP");
+}
+
+
+
+void loop(){
+
+    
+  SmartLocker.serverLoop();
+  delay(2);
+  
+
 }
