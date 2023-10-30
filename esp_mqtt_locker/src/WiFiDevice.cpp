@@ -20,7 +20,8 @@ void WiFiDevice::Init(char* ssid_AP, char* password_AP){
         while(1);
         }
         Serial.print("AP IP address: ");
-        Serial.println(WiFi.softAPIP());
+        serverIP = WiFi.softAPIP();
+        Serial.println(serverIP);
     }
 
     _server.on("/", std::bind(&WiFiDevice::handleRoot, this));
@@ -41,6 +42,11 @@ void WiFiDevice::Init(char* ssid_AP, char* password_AP){
 
 void WiFiDevice::addHandler(Uri uri, WebServer::THandlerFunction Handler){
     _server.on(uri, Handler);
+}
+
+IPAddress WiFiDevice::getIP()
+{
+    return serverIP;
 }
 
 void WiFiDevice::serverLoop() {
@@ -78,7 +84,8 @@ bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
             Serial.print("Connected to ");
             Serial.println(_inputData.input_ssid);
             Serial.print("IP address: ");
-            Serial.println(WiFi.localIP());
+            serverIP = WiFi.localIP();
+            Serial.println(serverIP);
             return true;
         }
         delay(500);
