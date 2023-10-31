@@ -1,7 +1,7 @@
 #include <WiFiDevice.h>
 
 
-WiFiDevice::WiFiDevice(): _server{80}{
+WiFiDevice::WiFiDevice(): server{80}{
 
 }
 
@@ -24,24 +24,28 @@ void WiFiDevice::Init(char* ssid_AP, char* password_AP){
         Serial.println(serverIP);
     }
 
-    _server.on("/", std::bind(&WiFiDevice::handleRoot, this));
-    _server.on("/login", std::bind(&WiFiDevice::handleLogin, this));
-    _server.on("/inline", [&]() {
-        _server.send(200, "text/plain", "Necessary information about device");
+    server.on("/", std::bind(&WiFiDevice::handleRoot, this));
+    server.on("/login", std::bind(&WiFiDevice::handleLogin, this));
+    server.on("/inline", [&]() {
+        server.send(200, "text/plain", "Necessary information about device");
     });
 
-    _server.onNotFound(std::bind(&WiFiDevice::handleNotFound, this));
+    server.onNotFound(std::bind(&WiFiDevice::handleNotFound, this));
     //here the list of headers to be recorded
     const char * headerkeys[] = {"User-Agent", "Cookie"} ;
     size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
     //ask server to track these headers
-    _server.collectHeaders(headerkeys, headerkeyssize);
-    _server.begin();
+    server.collectHeaders(headerkeys, headerkeyssize);
+    server.begin();
     Serial.println("HTTP server started");
 }
 
 void WiFiDevice::addHandler(Uri uri, WebServer::THandlerFunction Handler){
-    _server.on(uri, Handler);
+    server.on(uri, Handler);
+}
+
+void WiFiDevice::addHandler(Uri uri, http_method method, WebServer::THandlerFunction Handler){
+    server.on(uri, method, Handler);
 }
 
 IPAddress WiFiDevice::getIP()
@@ -53,7 +57,7 @@ void WiFiDevice::serverLoop() {
     uint32_t serverTimer, buttonTimer;
     if (millis() - serverTimer >= 100) {   // 10 times at second - server handler
         serverTimer = millis();            
-        _server.handleClient();
+        server.handleClient();
     }
     if (millis() - buttonTimer >= 500) {   // 2 times at second - reset button handler
         buttonTimer = millis();             
@@ -96,16 +100,16 @@ bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
 
 void WiFiDevice::handleLogin() { //login page, also called for disconnect
     String msg;
-    if (_server.hasArg("SSID") && _server.hasArg("PASSWORD")) {
-        this->inputData.input_ssid = _server.arg("SSID");
-        this->inputData.input_pass = _server.arg("PASSWORD");
+    if (server.hasArg("SSID") && server.hasArg("PASSWORD")) {
+        this->inputData.input_ssid = server.arg("SSID");
+        this->inputData.input_pass = server.arg("PASSWORD");
         this->inputData.isValid = true;
         EEPROM.put(0, inputData); // got SSID and PASSWORD, now remember
         EEPROM.commit();
 
         if (doConnect(this->inputData)) {
-        _server.sendHeader("Location", "/");
-        _server.send(301);
+        server.sendHeader("Location", "/");
+        server.send(301);
         Serial.println("Log in Successful");
         return;
         }
@@ -117,35 +121,35 @@ void WiFiDevice::handleLogin() { //login page, also called for disconnect
     content += "Password:<input type='password' name='PASSWORD' placeholder='password'><br>";
     content += "<input type='submit' name='SUBMIT' value='Submit'></form>" + msg + "<br>";
     content += "<a href='/inline'>Info</a></body></html>";
-    _server.send(200, "text/html", content);
+    server.send(200, "text/html", content);
 }
 
 void WiFiDevice::handleRoot() { //root page can be accessed only if authentification is ok
     Serial.println("Enter handleRoot");
     if (!inputData.isValid) {
-        _server.sendHeader("Location", "/login");
-        _server.send(301);
+        server.sendHeader("Location", "/login");
+        server.send(301);
         return;
     }
     String content = "<html><body><H2>You successfully connected to Wi-Fi!</H2><br>";
     content += "To reset Wi-Fi settings push and hold reset button for 3 sec, then restart device <br>";
     content += "<a href='/inline'>Info</a></body></html>";
-    _server.send(200, "text/html", content);
+    server.send(200, "text/html", content);
 }
 
 void WiFiDevice::handleNotFound() { //no need authentification
     static String message = "Error 404, this page does not exist\n\n";
     message += "URI: ";
-    message += (_server.uri());
+    message += (server.uri());
     message += "\nMethod: ";
-    message += (_server.method() == HTTP_GET) ? "GET" : "POST";
+    message += (server.method() == HTTP_GET) ? "GET" : "POST";
     message += "\nArguments: ";
-    message += _server.args();
+    message += server.args();
     message += "\n";
-    for (uint8_t i = 0; i < _server.args(); i++) {
-        message += " " + _server.argName(i) + ": " + _server.arg(i) + "\n";
+    for (uint8_t i = 0; i < server.args(); i++) {
+        message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
     }
-    _server.send(404, "text/plain", message);
+    server.send(404, "text/plain", message);
 }
 
 void WiFiDevice::resetWiFiData(WiFiDataStruct _inputData){

@@ -40,11 +40,12 @@ struct WiFiDataStruct {
 class WiFiDevice{
     public:
         WiFiDataStruct inputData;
-        WebServer _server;
+        WebServer server;
         WiFiDevice();
         void Init(char* ssid_AP, char* password_AP);
         void serverLoop();
         void addHandler(Uri uri, WebServer::THandlerFunction Handler);
+        void addHandler(Uri uri, http_method method, WebServer::THandlerFunction Handler);
         IPAddress getIP();
 
     private:
