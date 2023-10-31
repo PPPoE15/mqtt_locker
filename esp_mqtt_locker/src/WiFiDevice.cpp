@@ -5,7 +5,7 @@ WiFiDevice::WiFiDevice(): server{80}{
 
 }
 
-void WiFiDevice::Init(char* ssid_AP, char* password_AP){
+void WiFiDevice::Init(const char* ssid_AP, const char* password_AP){
     EEPROM.begin(512);
     EEPROM.get(0, inputData);
     Serial.println("Current SSID:");

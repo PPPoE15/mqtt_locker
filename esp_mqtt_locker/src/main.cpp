@@ -2,16 +2,15 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <Random16.h>
-//#include <Arduino.h>
+
 
 #define RXD2 18 // uart1 pins for locker control
 #define TXD2 19
 
 
-//const char *SSID = "LIIS";
-//const char *PWD = "qw8J*883";
 
-//WebServer server(80);
+//LIIS password   qw8J*883
+
 WiFiDevice smartLocker;
 
 StaticJsonDocument<250> jsonDocument;
@@ -28,20 +27,7 @@ String bearer;
 Random16 rnd; //Более легкий рандом чем оригинальная библиотека
 
 
-void connectToWiFi() {
-  Serial.print("Connecting to ");
-  //Serial.println(SSID);
-  
-  //WiFi.begin(SSID, PWD);
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(500);
-  }
- 
-  Serial.print("Connected. IP: ");
-  Serial.println(WiFi.localIP());
-}
+
 
 byte* create_message(byte plate_addr, byte lock_addr){
   
@@ -51,15 +37,24 @@ byte* create_message(byte plate_addr, byte lock_addr){
   return controlMessage;
 }
 
-void requestHandler(byte device_id, byte event_id, byte value){
+String requestHandler(byte device_id, byte event_id, byte value){
   switch (event_id)
   {
     case 4:
       Serial1.write(create_message(device_id, value), 5);
+      Serial1.read(feedbackMessage, 5);
+        if(feedbackMessage[3] == 0x11){  // check is successful unlocking 
+          return "fail";
+        }
+        else{
+          return "success";
+        }
       break;
 
     default:
       Serial.println("Unsupported event_id");
+      return("");
+      break;
   }
 }
 
@@ -126,7 +121,7 @@ void create_json_response(String status, int task_id) { //функция отв�
 
 
 
-void devicetasks(){
+void deviceTasks(){
   if (smartLocker.server.hasArg("plain") == false) {
     //обработка ошибки TODO
   }
@@ -147,8 +142,8 @@ void devicetasks(){
     byte device_id = jsonDocument["device_id"]; // plate number
     byte event_id = jsonDocument["event_id"]; 
     byte value = jsonDocument["value"]; // locker number 
-    requestHandler(device_id, event_id, value); // works with response
-    create_json_response("success", event_id);
+    String feedback = requestHandler(device_id, event_id, value); // works with response
+    create_json_response(feedback, event_id);
     smartLocker.server.send(200, "application/json", buffer);
   }
   else{
@@ -163,7 +158,7 @@ void devicetasks(){
 
 void setup_routing() { 
   smartLocker.addHandler("/api/Login", HTTP_POST, logined);
-  smartLocker.addHandler("/api/DeviceTasks", HTTP_PUT, devicetasks);
+  smartLocker.addHandler("/api/DeviceTasks", HTTP_PUT, deviceTasks);
 }
 
 
@@ -172,7 +167,6 @@ void setup() {
   Serial.begin(115200);
   Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
   smartLocker.Init("smart_locker", "12345678"); // AP settings
-  //connectToWiFi();
   setup_routing(); 
   timeClient.begin();
   timeClient.update();
