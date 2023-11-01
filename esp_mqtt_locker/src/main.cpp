@@ -170,6 +170,7 @@ void setup() {
   setup_routing(); 
   timeClient.begin();
   timeClient.update();
+  bearer = generateRandomString(60); // initial generating berear token
 }
 
 
@@ -179,7 +180,7 @@ void loop() {
   smartLocker.serverLoop();
   delay(2);
   static uint32_t tmrgetTime;
-    if (millis() - tmrgetTime >= 5000)
+    if (millis() - tmrgetTime >= 60000)
    {
       tmrgetTime = millis(); 
       String time = timeClient.getFormattedTime();
