@@ -1,3 +1,8 @@
+// TODO: 
+// 1. create a message class
+// 2. error handler
+// 3. implement checking all locker status
+
 #include <WiFiDevice.h>
 #include <ArduinoJson.h>
 #include <NTPClient.h>
@@ -7,6 +12,15 @@
 #define RXD2 18 // uart1 pins for locker control
 #define TXD2 19
 
+#define statusHeader 0x80
+#define   openHeader 0x8A
+#define   openCode   0x11
+#define statusCode   0x33
+
+#define numLockersOnPlate 50
+#define numPlates 1
+#define NUM_BYTES 7
+
 
 
 //LIIS password   qw8J*883
@@ -15,8 +29,9 @@ WiFiDevice smartLocker;
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
-byte controlMessage [] = {0x8A, 0x01, 0x18, 0x11, 0x9B};
-byte feedbackMessage [5];
+byte controlMessage[] = {0x8A, 0x01, 0x18, 0x11, 0x9B};
+byte feedbackMessage[5];
+//byte allLockerstatus[11];
 byte check_sum;
 
 WiFiUDP ntpUDP; 
@@ -29,32 +44,82 @@ Random16 rnd; //Более легкий рандом чем оригинальн
 
 
 
-byte* create_message(byte plate_addr, byte lock_addr){
-  
+byte* create_message(byte header, byte plate_addr, byte lock_addr, byte function_code){
+  controlMessage[0] = header;
   controlMessage[1] = plate_addr;
   controlMessage[2] = lock_addr;
+  controlMessage[3] = function_code;
   controlMessage[4] = controlMessage[0] ^ controlMessage[1] ^ controlMessage[2] ^ controlMessage[3];
   return controlMessage;
+}
+
+void checkAllLockers(){
+  Serial1.flush();
+  jsonDocument.clear();
+  JsonArray opened = jsonDocument.createNestedArray("opened");
+  uint8_t allLockerstatus[11] = {0,0,0,0,0,0,0,0,0,0,0};
+  Serial1.read(allLockerstatus, 11);
+  for (int i=2; i<9; i++){  // for each of the 7 byte in feedback message
+    //uint8_t status = 0x1;
+    uint8_t status = allLockerstatus[i];
+    Serial.println( status );
+    for (int j=7; j>=0; j--){  // for each of the 8 lockers in one byte
+      if(status != status % (1 << j)){
+        
+        status %= (1 << j); 
+        opened.add( (NUM_BYTES + 1 - i)*8 + j+1 );  // calculates num of the locker on the board
+        Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 );
+        Serial.println( i );
+        Serial.println( j );
+        
+        Serial.println("");
+      }
+    }
+  }
+  serializeJson(jsonDocument, buffer);
+  smartLocker.server.send(200, "application/json", buffer);
 }
 
 String requestHandler(byte device_id, byte event_id, byte value){
   switch (event_id)
   {
-    case 4:
-      Serial1.write(create_message(device_id, value), 5);
+    case 1: // event: check the STATUS of ALL lockers 
+      Serial1.write(create_message(statusHeader, device_id, 0, statusCode), 5);
+      checkAllLockers();
+      return("");
+    break;
+
+    case 2: // event: OPEN ALL lockers
+      Serial1.write(create_message(openHeader, device_id, 0, openCode), 5);
+      return("open_all");
+    break;
+
+    case 3: // event: check the STATUS of ONE locker
+      Serial1.write(create_message(statusHeader, device_id, value, statusCode), 5);
       Serial1.read(feedbackMessage, 5);
-        if(feedbackMessage[3] == 0x11){  // check is successful unlocking 
+      if(feedbackMessage[3] == 0x11){  // check if successful unlocking 
+        return "open";
+      }
+      else{
+        return "closed";
+      }
+    break;
+
+    case 4: // event: OPEN ONE locker 
+      Serial1.write(create_message(openHeader, device_id, value, openCode), 5);
+      Serial1.read(feedbackMessage, 5);
+        if(feedbackMessage[3] == 0x11){  // check if successful unlocking 
           return "fail";
         }
         else{
           return "success";
         }
-      break;
+    break;
 
     default:
       Serial.println("Unsupported event_id");
-      return("");
-      break;
+      return("Unsupported event_id");
+    break;
   }
 }
 
@@ -89,6 +154,7 @@ void create_json_bearer(String status, String name) { //функция для с
 
 
 void logined() { //функция авторизации
+  Serial.println("Lohined handler");
   if (smartLocker.server.hasArg("plain") == false) {
     //обработка ошибки TODO
   }
@@ -166,11 +232,22 @@ void setup_routing() {
 void setup() {
   Serial.begin(115200);
   Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
+
+  //debug
+  /*
+  byte allFeedbackMessage [11];
+  Serial1.write(create_message(statusHeader,0, 0, statusCode), 5);
+  Serial1.read(allLockerstatus, 11);  
+  Serial.println(isLockersOpen(allLockerstatus[8]));
+  */
+  
   smartLocker.Init("smart_locker", "12345678"); // AP settings
   setup_routing(); 
   timeClient.begin();
   timeClient.update();
   bearer = generateRandomString(60); // initial generating berear token
+  Serial.println(smartLocker.getIP());
+  
 }
 
 
