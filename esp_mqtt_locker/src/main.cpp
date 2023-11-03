@@ -53,14 +53,22 @@ byte* create_message(byte header, byte plate_addr, byte lock_addr, byte function
   return controlMessage;
 }
 
-void checkAllLockers(){
-  Serial1.flush();
+void checkAllLockers(byte device_id){
   jsonDocument.clear();
-  JsonArray opened = jsonDocument.createNestedArray("opened");
-  uint8_t allLockerstatus[11] = {0,0,0,0,0,0,0,0,0,0,0};
+  JsonArray opened = jsonDocument.createNestedArray("closed");
+
+  uint8_t allLockerstatus[11];
+  while(Serial1.available()){
+    Serial1.read();
+  }
+  delay(50);
+  Serial1.write(create_message(statusHeader, device_id, 0, statusCode), 5);
+  delay(50);
   Serial1.read(allLockerstatus, 11);
+  delay(50);
+
   for (int i=2; i<9; i++){  // for each of the 7 byte in feedback message
-    //uint8_t status = 0x1;
+
     uint8_t status = allLockerstatus[i];
     Serial.println( status );
     for (int j=7; j>=0; j--){  // for each of the 8 lockers in one byte
@@ -68,24 +76,24 @@ void checkAllLockers(){
         
         status %= (1 << j); 
         opened.add( (NUM_BYTES + 1 - i)*8 + j+1 );  // calculates num of the locker on the board
-        Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 );
-        Serial.println( i );
-        Serial.println( j );
-        
+        Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 ); 
         Serial.println("");
       }
     }
   }
   serializeJson(jsonDocument, buffer);
   smartLocker.server.send(200, "application/json", buffer);
+  while(Serial1.available()){
+    Serial1.read();
+  }
 }
 
 String requestHandler(byte device_id, byte event_id, byte value){
   switch (event_id)
   {
     case 1: // event: check the STATUS of ALL lockers 
-      Serial1.write(create_message(statusHeader, device_id, 0, statusCode), 5);
-      checkAllLockers();
+      
+      checkAllLockers(device_id);
       return("");
     break;
 
@@ -108,6 +116,9 @@ String requestHandler(byte device_id, byte event_id, byte value){
     case 4: // event: OPEN ONE locker 
       Serial1.write(create_message(openHeader, device_id, value, openCode), 5);
       Serial1.read(feedbackMessage, 5);
+        while(Serial1.available()){
+          Serial1.read();
+        }
         if(feedbackMessage[3] == 0x11){  // check if successful unlocking 
           return "fail";
         }
