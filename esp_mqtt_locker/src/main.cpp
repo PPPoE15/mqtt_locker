@@ -1,7 +1,7 @@
 // TODO: 
-// 1. create a message class
+
 // 2. error handler
-// 3. implement checking all locker status
+
 
 #include <WiFiDevice.h>
 #include <ArduinoJson.h>
@@ -29,10 +29,6 @@ WiFiDevice smartLocker;
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
-byte controlMessage[] = {0x8A, 0x01, 0x18, 0x11, 0x9B};
-byte feedbackMessage[5];
-//byte allLockerstatus[11];
-byte check_sum;
 
 WiFiUDP ntpUDP; 
 NTPClient timeClient(ntpUDP,"0.pool.ntp.org", 10800, 60000);
@@ -41,34 +37,70 @@ String bearer;
 
 Random16 rnd; //Более легкий рандом чем оригинальная библиотека
 
+class Message
+{
+  public:
+    Message(String type, byte plate, byte lock, byte* feedback){
+      clearSerial();
+
+      if(type == "open") { create_message(0x8A, plate, lock, 0x11);}
+      else { create_message(0x80, plate, lock, 0x33); }
+
+      Serial1.write(_message, 5);
+      delay(50);
+      Serial1.read(feedback, 11);
+      delay(50);
+    }
+
+    Message(String type, byte plate, byte* feedback){
+      clearSerial();
+
+      if(type == "open") { create_message(0x8A, plate, 0, 0x11);}
+      else { create_message(0x80, plate, 0, 0x33); }
+
+      Serial1.write(_message, 5);
+      delay(50);
+      Serial1.read(feedback, 11);
+      delay(50);
+    }
+
+    Message(String type, byte plate){
+      clearSerial();
+      if(type == "open") { create_message(0x8A, plate, 0, 0x11);}
+      else { create_message(0x80, plate, 0, 0x33); }
+
+      Serial1.write(_message, 5);
+    }
+
+  private:
+    byte _message[5];
+    void create_message(byte header, byte plate_addr, byte lock_addr, byte function_code){
+      _message[0] = header;
+      _message[1] = plate_addr;
+      _message[2] = lock_addr;
+      _message[3] = function_code;
+      _message[4] = _message[0] ^ _message[1] ^ _message[2] ^ _message[3];
+    }
+
+    void clearSerial(){
+      while(Serial1.available()){
+        Serial1.read();
+      }
+      delay(50);
+    }
+};
 
 
 
-byte* create_message(byte header, byte plate_addr, byte lock_addr, byte function_code){
-  controlMessage[0] = header;
-  controlMessage[1] = plate_addr;
-  controlMessage[2] = lock_addr;
-  controlMessage[3] = function_code;
-  controlMessage[4] = controlMessage[0] ^ controlMessage[1] ^ controlMessage[2] ^ controlMessage[3];
-  return controlMessage;
-}
 
 void checkAllLockers(byte device_id){
   jsonDocument.clear();
   JsonArray opened = jsonDocument.createNestedArray("closed");
-
   uint8_t allLockerstatus[11];
-  while(Serial1.available()){
-    Serial1.read();
-  }
-  delay(50);
-  Serial1.write(create_message(statusHeader, device_id, 0, statusCode), 5);
-  delay(50);
-  Serial1.read(allLockerstatus, 11);
-  delay(50);
+  Message message("check", device_id, allLockerstatus);
+
 
   for (int i=2; i<9; i++){  // for each of the 7 byte in feedback message
-
     uint8_t status = allLockerstatus[i];
     Serial.println( status );
     for (int j=7; j>=0; j--){  // for each of the 8 lockers in one byte
@@ -83,53 +115,47 @@ void checkAllLockers(byte device_id){
   }
   serializeJson(jsonDocument, buffer);
   smartLocker.server.send(200, "application/json", buffer);
-  while(Serial1.available()){
-    Serial1.read();
-  }
 }
 
 String requestHandler(byte device_id, byte event_id, byte value){
+  byte feedbackMessage[5];
+
   switch (event_id)
   {
-    case 1: // event: check the STATUS of ALL lockers 
+    case 1: { // event: check the STATUS of ALL lockers 
       checkAllLockers(device_id);
       return("");
-    break;
+    } break;
 
-    case 2: // event: OPEN ALL lockers
-      Serial1.write(create_message(openHeader, device_id, 0, openCode), 5);
+    case 2: { // event: OPEN ALL lockers
+      Message event2("open", device_id);
       return("open_all");
-    break;
+    } break;
 
-    case 3: // event: check the STATUS of ONE locker
-      Serial1.write(create_message(statusHeader, device_id, value, statusCode), 5);
-      Serial1.read(feedbackMessage, 5);
+    case 3: { // event: check the STATUS of ONE locker
+      Message event3("check", device_id, value, feedbackMessage);
       if(feedbackMessage[3] == 0x11){  // check if successful unlocking 
         return "closed";
       }
       else{
         return "open";
       }
-    break;
+    } break;
 
-    case 4: // event: OPEN ONE locker 
-      Serial1.write(create_message(openHeader, device_id, value, openCode), 5);
-      Serial1.read(feedbackMessage, 5);
-        while(Serial1.available()){
-          Serial1.read();
-        }
-        if(feedbackMessage[3] == 0x11){  // check if successful unlocking 
-          return "fail";
-        }
-        else{
-          return "success";
-        }
-    break;
+    case 4: { // event: OPEN ONE locker 
+      Message event4("open", device_id, value, feedbackMessage);
+      if(feedbackMessage[3] == 0x11){  // check if successful unlocking 
+        return "fail";
+      }
+      else{
+        return "success";
+      }
+  } break;
 
-    default:
+    default: {
       Serial.println("Unsupported event_id");
       return("Unsupported event_id");
-    break;
+    } break;
   }
 }
 
@@ -242,22 +268,12 @@ void setup_routing() {
 void setup() {
   Serial.begin(115200);
   Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
-
-  //debug
-  /*
-  byte allFeedbackMessage [11];
-  Serial1.write(create_message(statusHeader,0, 0, statusCode), 5);
-  Serial1.read(allLockerstatus, 11);  
-  Serial.println(isLockersOpen(allLockerstatus[8]));
-  */
-  
   smartLocker.Init("smart_locker", "12345678"); // AP settings
   setup_routing(); 
   timeClient.begin();
   timeClient.update();
   bearer = generateRandomString(60); // initial generating berear token
   Serial.println(smartLocker.getIP());
-  
 }
 
 
