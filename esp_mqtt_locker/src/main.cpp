@@ -92,7 +92,6 @@ String requestHandler(byte device_id, byte event_id, byte value){
   switch (event_id)
   {
     case 1: // event: check the STATUS of ALL lockers 
-      
       checkAllLockers(device_id);
       return("");
     break;
@@ -106,10 +105,10 @@ String requestHandler(byte device_id, byte event_id, byte value){
       Serial1.write(create_message(statusHeader, device_id, value, statusCode), 5);
       Serial1.read(feedbackMessage, 5);
       if(feedbackMessage[3] == 0x11){  // check if successful unlocking 
-        return "open";
+        return "closed";
       }
       else{
-        return "closed";
+        return "open";
       }
     break;
 
@@ -266,7 +265,7 @@ void setup() {
 void loop() {
 
   smartLocker.serverLoop();
-  delay(2);
+
   static uint32_t tmrgetTime;
     if (millis() - tmrgetTime >= 60000)
    {
@@ -274,6 +273,16 @@ void loop() {
       String time = timeClient.getFormattedTime();
       //Serial.println("Time: " + time);
    }
+
+  static uint32_t flushTmr;
+  if (millis() - flushTmr >= 300) // clear uart buffer
+  {
+    flushTmr = millis(); 
+    while(Serial1.available()){
+      Serial1.read();
+    }
+
+  }
 
 }
 
