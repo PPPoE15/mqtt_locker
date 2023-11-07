@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <Random16.h>
+#include <PubSubClient.h>
 
 
 #define RXD2 18 // uart1 pins for locker control
@@ -22,10 +23,20 @@
 
 #define EMG_PIN 5
 
+bool api_proto = true;
+bool mqtt_proto = false;
+
+char mqttServerIP[16];
+uint16_t mqttServerPort = 1883;
+const char* control_topic = "locker/control"; // to subscribe
+const char* feedback_topic = "locker/locker_status"; // to publish
+
+
 
 //LIIS password   qw8J*883
 
 WiFiDevice smartLocker;
+PubSubClient client;
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
@@ -297,11 +308,145 @@ void deviceTasks(){
   } 
 }
 
+void reconnect() {
+  while (!client.connected()) {
+    Serial.println("Attempting MQTT connection...");
+    if (client.connect("ESP32_clientID")) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("outTopic", "Nodemcu connected to MQTT");
+      // ... and resubscribe
+       client.subscribe(control_topic);
+
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 1 seconds");
+      // Wait 1 seconds before retrying
+      delay(1000);
+    }
+  }
+}
+
+void connectmqtt()
+{
+  client.connect("ESP32_clientID");  // ESP will connect to mqtt broker with clientID
+  {
+    Serial.println("connected to MQTT");
+    // Once connected, publish an announcement...
+
+    // ... and resubscribe
+    client.subscribe(control_topic); 
+    client.publish("outTopic",  "connected to MQTT");
+    client.publish("locker/locker_status", "check");
+
+    if (!client.connected())
+    {
+      Serial.println("Reconecting...");
+      reconnect();
+    }
+  }
+}
+
+void messageDecoder(byte* payload, byte* feedback){
+  byte plate_addr;
+  byte lock_addr;
+
+  if (payload[1] == ';')  // determinating plate addres
+  {  
+    plate_addr = payload[0] - 0x30;
+    if (payload[3] == ';')  // determinating locker addres
+    { 
+    lock_addr = payload[2] - 0x30;
+    } else{
+      lock_addr = payload[3] - 0x30 + (payload[2] - 0x30) * 10;
+    }
+  } 
+  else 
+  {
+    plate_addr = payload[1] - 0x30 + (payload[0] - 0x30) * 10;
+    if (payload[4] == ';')  // determinating locker addres
+    { 
+    lock_addr = payload[3] - 0x30;
+    } 
+    else
+    {
+     lock_addr = payload[4] - 0x30 + (payload[3] - 0x30) * 10;
+    }
+  }
+
+  Message mqttMessage("open", plate_addr, lock_addr, feedback);
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {   //callback includes topic and payload ( from which (topic) the payload is comming)
+  byte feedback[5];
+  messageDecoder(payload, feedback);
+
+  if(feedback[3] == 0x11)  // check is successful unlocking
+  {  
+    client.publish(feedback_topic, "open");
+  }
+  else 
+  {
+    client.publish(feedback_topic, "closed");
+  } 
+}
+
+void initMQTTclient(char* serverIP, uint16_t serverPort){
+  Serial.println("trying to connect to MQTT");
+  Serial.println(serverIP);
+  Serial.println(serverPort);
+  WiFiClient espClient (smartLocker.server.client());
+  client.setClient(espClient);
+  client.setServer(serverIP, serverPort);//connecting to mqtt server
+  client.setCallback(callback);
+  delay(500);
+  connectmqtt();
+}
+
+
+
+
+void settingsHandler(){
+  if(smartLocker.server.hasArg("api_proto")){
+    Serial.println(smartLocker.server.arg("api_proto"));
+    api_proto = true;  
+  } 
+  else{
+    api_proto = false;
+  }
+  if(smartLocker.server.hasArg("mqtt_proto")){
+    Serial.println(smartLocker.server.arg("mqtt_proto"));
+    mqtt_proto = true;
+    if(smartLocker.server.hasArg("mqttIP")){
+      String str = smartLocker.server.arg("mqttIP");
+      str.toCharArray(mqttServerIP, 16);
+    }
+    if(smartLocker.server.hasArg("mqttPort")){
+      mqttServerPort = smartLocker.server.arg("mqttPort").toInt();
+    }
+    initMQTTclient(mqttServerIP, mqttServerPort);
+  }
+  else{
+    mqtt_proto = false;
+  }
+    String content = "<html><body><form action='/settings' method='POST'><br>";
+    content += "<br>API enabled by default<br>";
+    content += "<input type='checkbox' id='api' name='api_proto' value='api'checked/> <label for='api'>api</label> <br>";
+    content += "<input type='checkbox' id='mqtt' name='mqtt_proto' value='mqtt'/> <label for='mqtt'>mqtt</label> <br>";
+    content += "MQTT broker IP:<input type='text' name='mqttIP' placeholder='0.0.0.0'><br>";
+    content += "MQTT broker port:<input type='text' name='mqttPort' placeholder='1883'><br>";
+    content += "<input type='submit' name='SUBMIT' value='Submit'></form> <br>";
+    content += "<a href='/info'>Info</a></body></html>";
+    smartLocker.server.send(200, "text/html", content);
+    
+}
 
 
 void setup_routing() { 
   smartLocker.addHandler("/api/Login", HTTP_POST, logined);
   smartLocker.addHandler("/api/DeviceTasks", HTTP_PUT, deviceTasks);
+  smartLocker.addHandler("/settings", settingsHandler);
 }
 
 
@@ -315,12 +460,18 @@ void setup() {
   timeClient.update();
   bearer = generateRandomString(60); // initial generating berear token
   Serial.println(smartLocker.getIP());
+  
 }
 
 
 
 void loop() {
   smartLocker.serverLoop();
+
+  if(mqtt_proto){
+    Serial.println("Enter loop");
+    client.loop();
+  }
 
   static uint32_t tmrgetTime;
     if (millis() - tmrgetTime >= 60000)

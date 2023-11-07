@@ -26,7 +26,7 @@ void WiFiDevice::Init(const char* ssid_AP, const char* password_AP){
 
     server.on("/", std::bind(&WiFiDevice::handleRoot, this));
     server.on("/login", std::bind(&WiFiDevice::handleLogin, this));
-    server.on("/inline", [&]() {
+    server.on("/info", [&]() {
         server.send(200, "text/plain", "Necessary information about device");
     });
 
@@ -120,7 +120,7 @@ void WiFiDevice::handleLogin() { //login page, also called for disconnect
     content += "SSID name:<input type='text' name='SSID' placeholder='SSID'><br>";
     content += "Password:<input type='password' name='PASSWORD' placeholder='password'><br>";
     content += "<input type='submit' name='SUBMIT' value='Submit'></form>" + msg + "<br>";
-    content += "<a href='/inline'>Info</a></body></html>";
+    content += "<a href='/info'>Info</a></body></html>";
     server.send(200, "text/html", content);
 }
 
@@ -133,7 +133,7 @@ void WiFiDevice::handleRoot() { //root page can be accessed only if authentifica
     }
     String content = "<html><body><H2>You successfully connected to Wi-Fi!</H2><br>";
     content += "To reset Wi-Fi settings push and hold reset button for 3 sec, then restart device <br>";
-    content += "<a href='/inline'>Info</a></body></html>";
+    content += "<a href='/info'>Info</a></body></html>";
     server.send(200, "text/html", content);
 }
 
