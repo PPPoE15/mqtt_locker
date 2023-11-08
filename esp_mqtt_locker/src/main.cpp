@@ -41,12 +41,9 @@ MQTTClient mqttClient;
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
-
 WiFiUDP ntpUDP; 
 NTPClient timeClient(ntpUDP,"0.pool.ntp.org", 10800, 60000);
-
 String bearer;
-
 Random16 rnd; //Более легкий рандом чем оригинальная библиотека
 
 class Message
@@ -318,9 +315,9 @@ void reconnect() {
     if (mqttClient.connect("ESP32_clientID")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      mqttClient.publish("locker/outTopic", "Nodemcu connected to MQTT");
+      //mqttClient.publish("locker/outTopic", "Nodemcu connected to MQTT");
       // ... and resubscribe
-       mqttClient.subscribe(control_topic);
+      //mqttClient.subscribe(control_topic);
 
     } else {
       Serial.print("failed, rc=");
@@ -339,9 +336,9 @@ void connectmqtt()
     // Once connected, publish an announcement...
 
     // ... and resubscribe
-    mqttClient.subscribe(control_topic); 
-    mqttClient.publish("locker/outTopic",  "connected to MQTT");
-    mqttClient.publish("locker/locker_status", "check");
+    //mqttClient.subscribe(control_topic); 
+    //mqttClient.publish("locker/outTopic",  "connected to MQTT");
+    //mqttClient.publish("locker/locker_status", "check");
 
     if (!mqttClient.connected())
     {
@@ -387,11 +384,11 @@ void callback(String& topic, String& payload) {   //callback includes topic and 
 
   if(feedback[3] == 0x11)  // check is successful unlocking
   {  
-    mqttClient.publish(feedback_topic, "open");
+    //mqttClient.publish(feedback_topic, "open");
   }
   else 
   {
-    mqttClient.publish(feedback_topic, "closed");
+    //mqttClient.publish(feedback_topic, "closed");
   } 
 }
 
@@ -476,11 +473,13 @@ void loop() {
   smartLocker.serverLoop();
 
   if(mqtt_proto){
-    Serial.println("Enter loop 1");
-    if(mqttClient.connected()){
-      Serial.println("Enter loop");
+    if(WiFi.isConnected()){
+  
+      Serial.println("Enter loop 1");
       mqttClient.loop();
-    } else reconnect();
+      Serial.println("Enter loop");
+    }
+    //if(mqttClient.connected()){} else reconnect();
   }
 
   static uint32_t tmrgetTime;
