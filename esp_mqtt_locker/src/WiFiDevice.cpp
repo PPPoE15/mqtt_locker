@@ -32,10 +32,10 @@ void WiFiDevice::Init(const char* ssid_AP, const char* password_AP){
 
     server.onNotFound(std::bind(&WiFiDevice::handleNotFound, this));
     //here the list of headers to be recorded
-    const char * headerkeys[] = {"User-Agent", "Cookie"} ;
-    size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
+    //const char * headerkeys[] = {"User-Agent", "Cookie"} ;
+    //size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
     //ask server to track these headers
-    server.collectHeaders(headerkeys, headerkeyssize);
+    //server.collectHeaders(headerkeys, headerkeyssize);
     server.begin();
     Serial.println("HTTP server started");
 }
@@ -79,9 +79,7 @@ bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
     }
     Serial.println("Trying to connect...");
     WiFi.begin(_inputData.input_ssid, _inputData.input_pass);
-    WiFi.setAutoReconnect(true);
     Serial.println("");
-
     for(int i=0; i < 60; i++){
         if(WiFi.status() == WL_CONNECTED){ 
             Serial.println("\n");
@@ -90,6 +88,7 @@ bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
             Serial.print("IP address: ");
             serverIP = WiFi.localIP();
             Serial.println(serverIP);
+            WiFi.setAutoReconnect(true);
             return true;
         }
         delay(500);

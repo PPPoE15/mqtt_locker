@@ -6,7 +6,8 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <Random16.h>
-#include <PubSubClient.h>
+//#include <PubSubClient.h>
+#include <MQTT.h>
 
 
 #define RXD2 18 // uart1 pins for locker control
@@ -36,7 +37,7 @@ const char* feedback_topic = "locker/locker_status"; // to publish
 //LIIS password   qw8J*883
 
 WiFiDevice smartLocker;
-PubSubClient mqttClient;
+MQTTClient mqttClient;
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
@@ -140,9 +141,6 @@ class button {
           }
         }
 }emgButton(EMG_PIN);
-
-
-
 
 
 void checkAllLockers(byte device_id){
@@ -314,18 +312,18 @@ void deviceTasks(){
 }
 
 void reconnect() {
+  Serial.println("Enter reconnect");
   while (!mqttClient.connected()) {
     Serial.println("Attempting MQTT connection...");
     if (mqttClient.connect("ESP32_clientID")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      mqttClient.publish("outTopic", "Nodemcu connected to MQTT");
+      mqttClient.publish("locker/outTopic", "Nodemcu connected to MQTT");
       // ... and resubscribe
        mqttClient.subscribe(control_topic);
 
     } else {
       Serial.print("failed, rc=");
-      Serial.print(mqttClient.state());
       Serial.println(" try again in 1 seconds");
       // Wait 1 seconds before retrying
       delay(1000);
@@ -342,7 +340,7 @@ void connectmqtt()
 
     // ... and resubscribe
     mqttClient.subscribe(control_topic); 
-    mqttClient.publish("outTopic",  "connected to MQTT");
+    mqttClient.publish("locker/outTopic",  "connected to MQTT");
     mqttClient.publish("locker/locker_status", "check");
 
     if (!mqttClient.connected())
@@ -353,7 +351,7 @@ void connectmqtt()
   }
 }
 
-void messageDecoder(byte* payload, byte* feedback){
+void messageDecoder(const String& payload, byte* feedback){
   byte plate_addr;
   byte lock_addr;
 
@@ -383,7 +381,7 @@ void messageDecoder(byte* payload, byte* feedback){
   Message mqttMessage("open", plate_addr, lock_addr, feedback);
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {   //callback includes topic and payload ( from which (topic) the payload is comming)
+void callback(String& topic, String& payload) {   //callback includes topic and payload ( from which (topic) the payload is comming)
   byte feedback[5];
   messageDecoder(payload, feedback);
 
@@ -401,10 +399,13 @@ void initMQTTclient(char* serverIP, uint16_t serverPort){
   Serial.println("trying to connect to MQTT");
   Serial.println(serverIP);
   Serial.println(serverPort);
-  WiFiClient espClient (smartLocker.server.client());
-  mqttClient.setClient(espClient);
-  mqttClient.setServer(serverIP, serverPort);//connecting to mqtt server
-  mqttClient.setCallback(callback);
+  WiFiClient LockerClient = smartLocker.server.client();
+  mqttClient.begin(serverIP, serverPort, LockerClient);
+  mqttClient.onMessage(callback);
+  while (!mqttClient.connect("LockerController")) {
+    Serial.print(".");
+    delay(500);
+  }
   delay(500);
   connectmqtt();
 }
@@ -465,7 +466,7 @@ void setup() {
   timeClient.begin();
   timeClient.update();
   bearer = generateRandomString(60); // initial generating berear token
-  Serial.println(smartLocker.getIP());
+  //Serial.println(smartLocker.getIP());
   
 }
 
@@ -475,8 +476,11 @@ void loop() {
   smartLocker.serverLoop();
 
   if(mqtt_proto){
-    Serial.println("Enter loop");
-    mqttClient.loop();
+    Serial.println("Enter loop 1");
+    if(mqttClient.connected()){
+      Serial.println("Enter loop");
+      mqttClient.loop();
+    } else reconnect();
   }
 
   static uint32_t tmrgetTime;
