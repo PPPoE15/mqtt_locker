@@ -69,8 +69,8 @@ void WiFiDevice::offFlagValid(WiFiDataStruct _inputData) { // call if need to of
     EEPROM.commit();
 }
 
-bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
 
+bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
     if(!_inputData.isValid){
         Serial.println("Not valid SSID or PASSWORD");
         return false;
