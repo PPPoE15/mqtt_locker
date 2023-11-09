@@ -36,7 +36,7 @@ const char* feedback_topic = "locker/locker_status"; // to publish
 //LIIS password   qw8J*883
 
 WiFiDevice smartLocker;
-PubSubClient client;
+PubSubClient mqttClient;
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
@@ -273,7 +273,12 @@ void create_json_response(String status, int task_id) { //функция отв�
   serializeJson(jsonDocument, buffer); 
 }
 
-
+void getVersion(){
+  jsonDocument.clear();
+  jsonDocument["version"] = "1.8";
+  serializeJson(jsonDocument, buffer);
+  smartLocker.server.send(200, "application/json", buffer);
+}
 
 void deviceTasks(){
   if (smartLocker.server.hasArg("plain") == false) {
@@ -309,18 +314,18 @@ void deviceTasks(){
 }
 
 void reconnect() {
-  while (!client.connected()) {
+  while (!mqttClient.connected()) {
     Serial.println("Attempting MQTT connection...");
-    if (client.connect("ESP32_clientID")) {
+    if (mqttClient.connect("ESP32_clientID")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      client.publish("outTopic", "Nodemcu connected to MQTT");
+      mqttClient.publish("outTopic", "Nodemcu connected to MQTT");
       // ... and resubscribe
-       client.subscribe(control_topic);
+       mqttClient.subscribe(control_topic);
 
     } else {
       Serial.print("failed, rc=");
-      Serial.print(client.state());
+      Serial.print(mqttClient.state());
       Serial.println(" try again in 1 seconds");
       // Wait 1 seconds before retrying
       delay(1000);
@@ -330,17 +335,17 @@ void reconnect() {
 
 void connectmqtt()
 {
-  client.connect("ESP32_clientID");  // ESP will connect to mqtt broker with clientID
+  mqttClient.connect("ESP32_clientID");  // ESP will connect to mqtt broker with clientID
   {
     Serial.println("connected to MQTT");
     // Once connected, publish an announcement...
 
     // ... and resubscribe
-    client.subscribe(control_topic); 
-    client.publish("outTopic",  "connected to MQTT");
-    client.publish("locker/locker_status", "check");
+    mqttClient.subscribe(control_topic); 
+    mqttClient.publish("outTopic",  "connected to MQTT");
+    mqttClient.publish("locker/locker_status", "check");
 
-    if (!client.connected())
+    if (!mqttClient.connected())
     {
       Serial.println("Reconecting...");
       reconnect();
@@ -384,11 +389,11 @@ void callback(char* topic, byte* payload, unsigned int length) {   //callback in
 
   if(feedback[3] == 0x11)  // check is successful unlocking
   {  
-    client.publish(feedback_topic, "open");
+    mqttClient.publish(feedback_topic, "open");
   }
   else 
   {
-    client.publish(feedback_topic, "closed");
+    mqttClient.publish(feedback_topic, "closed");
   } 
 }
 
@@ -397,9 +402,9 @@ void initMQTTclient(char* serverIP, uint16_t serverPort){
   Serial.println(serverIP);
   Serial.println(serverPort);
   WiFiClient espClient (smartLocker.server.client());
-  client.setClient(espClient);
-  client.setServer(serverIP, serverPort);//connecting to mqtt server
-  client.setCallback(callback);
+  mqttClient.setClient(espClient);
+  mqttClient.setServer(serverIP, serverPort);//connecting to mqtt server
+  mqttClient.setCallback(callback);
   delay(500);
   connectmqtt();
 }
@@ -447,7 +452,8 @@ void setup_routing() {
   smartLocker.addHandler("/api/Login", HTTP_POST, logined);
   smartLocker.addHandler("/api/DeviceTasks", HTTP_PUT, deviceTasks);
   smartLocker.addHandler("/settings", settingsHandler);
-}
+  smartLocker.addHandler("/api/GetVersion", HTTP_GET, getVersion);
+} 
 
 
 
@@ -470,7 +476,7 @@ void loop() {
 
   if(mqtt_proto){
     Serial.println("Enter loop");
-    client.loop();
+    mqttClient.loop();
   }
 
   static uint32_t tmrgetTime;
