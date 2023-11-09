@@ -26,9 +26,6 @@ void WiFiDevice::Init(const char* ssid_AP, const char* password_AP){
 
     server.on("/", std::bind(&WiFiDevice::handleRoot, this));
     server.on("/login", std::bind(&WiFiDevice::handleLogin, this));
-    server.on("/info", [&]() {
-        server.send(200, "text/plain", "Necessary information about device");
-    });
 
     server.onNotFound(std::bind(&WiFiDevice::handleNotFound, this));
     //here the list of headers to be recorded
@@ -73,7 +70,7 @@ void WiFiDevice::offFlagValid(WiFiDataStruct _inputData) { // call if need to of
 }
 
 bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
-    //WiFi.disconnect(true);
+
     if(!_inputData.isValid){
         Serial.println("Not valid SSID or PASSWORD");
         return false;
