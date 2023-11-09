@@ -56,7 +56,6 @@ void WiFiDevice::serverLoop() {
 }
 
 void WiFiDevice::offFlagValid(WiFiDataStruct _inputData) { // call if need to off valid flag in SSID PASS pair struct
-    Serial.println("NOT VALID");
     _inputData.isValid = false;
     EEPROM.put(0,_inputData);
     EEPROM.commit();

@@ -25,8 +25,8 @@
 #endif
 
 
-#ifndef resetWiFiButton
-    #define resetWiFiButton 21
+#ifndef resetWiFiPin
+    #define resetWiFiPin 21
 #endif
 
 
@@ -88,7 +88,7 @@ class WiFiDevice{
                 byte _pin;
                 uint32_t _tmr;
                 bool _flag;
-        } resetButton{resetWiFiButton};
+        } resetButton{resetWiFiPin};
 
 };
 
