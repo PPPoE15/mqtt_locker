@@ -7,7 +7,7 @@
 #include <NTPClient.h>
 #include <Random16.h>
 #include <PubSubClient.h>
-//#include <MQTT.h>
+
 
 
 #define RXD2 18 // uart1 pins for locker control
@@ -23,12 +23,16 @@
 #define NUM_BYTES 7
 
 #define EMG_PIN 5
+#define PROTO_STATE_ADDR 100
+struct ProtoState{
+  bool api_proto = true;
+  bool mqtt_proto = false;
+  char mqttServerIP[16];
+  uint16_t mqttServerPort = 1883;
+}protoState;
 
-bool api_proto = true;
-bool mqtt_proto = false;
 
-char mqttServerIP[16];
-uint16_t mqttServerPort = 1883;
+
 const char* control_topic = "locker/control"; // to subscribe
 const char* feedback_topic = "locker/locker_status"; // to publish
 
@@ -319,8 +323,8 @@ void reconnect() {
       mqttClient.subscribe(control_topic);
 
     } else {
-      Serial.print("failed, rc=");
-      Serial.println(" try again in 1 seconds");
+      //Serial.print("failed, rc=");
+      //Serial.println(" try again in 1 seconds");
       // Wait 1 seconds before retrying
       delay(1000);
     }
@@ -391,7 +395,7 @@ void callback(char* topic, byte* payload, unsigned int lenght) {   //callback in
   } 
 }
 
-void initMQTTclient(char* serverIP, uint16_t serverPort){
+void initMQTT(char* serverIP, uint16_t serverPort){
   Serial.println("trying to connect to MQTT");
   Serial.println(serverIP);
   Serial.println(serverPort);
@@ -412,35 +416,50 @@ void initMQTTclient(char* serverIP, uint16_t serverPort){
 void settingsHandler(){
   if(smartLocker.server.hasArg("api_proto")){
     Serial.println(smartLocker.server.arg("api_proto"));
-    api_proto = true;  
+    protoState.api_proto = true;  
   } 
   else{
-    api_proto = false;
+    protoState.api_proto = false;
   }
   if(smartLocker.server.hasArg("mqtt_proto")){
     Serial.println(smartLocker.server.arg("mqtt_proto"));
-    mqtt_proto = true;
-    if(smartLocker.server.hasArg("mqttIP")){
+    protoState.mqtt_proto = true;
+    if(smartLocker.server.hasArg("mqttIP") & smartLocker.server.arg("mqttIP") != ""){
       String str = smartLocker.server.arg("mqttIP");
-      str.toCharArray(mqttServerIP, 16);
+      str.toCharArray(protoState.mqttServerIP, 16);
     }
-    if(smartLocker.server.hasArg("mqttPort")){
-      mqttServerPort = smartLocker.server.arg("mqttPort").toInt();
+    if(smartLocker.server.hasArg("mqttPort") & smartLocker.server.arg("mqttPort") != ""){
+      protoState.mqttServerPort = smartLocker.server.arg("mqttPort").toInt();
     }
-    initMQTTclient(mqttServerIP, mqttServerPort);
+    initMQTT(protoState.mqttServerIP, protoState.mqttServerPort);
   }
   else{
-    mqtt_proto = false;
+    protoState.mqtt_proto = false;
   }
-    String content = "<html><body><form action='/settings' method='POST'><br>";
-    content += "<br>API enabled by default<br>";
-    content += "<input type='checkbox' id='api' name='api_proto' value='api'checked/> <label for='api'>api</label> <br>";
-    content += "<input type='checkbox' id='mqtt' name='mqtt_proto' value='mqtt'/> <label for='mqtt'>mqtt</label> <br>";
-    content += "MQTT broker IP:<input type='text' name='mqttIP' placeholder='0.0.0.0'><br>";
-    content += "MQTT broker port:<input type='text' name='mqttPort' placeholder='1883'><br>";
-    content += "<input type='submit' name='SUBMIT' value='Submit'></form> <br>";
-    content += "<a href='/info'>Info</a></body></html>";
-    smartLocker.server.send(200, "text/html", content);
+  EEPROM.put(PROTO_STATE_ADDR, protoState);
+  EEPROM.commit();
+  
+  Serial.println(protoState.api_proto);
+  Serial.println(protoState.mqtt_proto);
+  String apiChecked = "checked";
+  if(!protoState.api_proto){
+    apiChecked = "";
+  }
+  String mqttChecked = "";
+  if(protoState.mqtt_proto){
+    mqttChecked = "checked";
+  }
+
+
+  String content = "<html><body><form action='/settings' method='POST'><br>";
+  content += "<br>API enabled by default<br>";
+  content += "<input type='checkbox' id='api' name='api_proto' value='api'" + apiChecked + "/> <label for='api'>api</label> <br>";
+  content += "<input type='checkbox' id='mqtt' name='mqtt_proto' value='mqtt'" + mqttChecked + "/> <label for='mqtt'>mqtt</label> <br>";
+  content += "MQTT broker IP:<input type='text' name='mqttIP' placeholder='0.0.0.0'><br>";
+  content += "MQTT broker port:<input type='text' name='mqttPort' placeholder='1883'><br>";
+  content += "<input type='submit' name='SUBMIT' value='Submit'></form> <br>";
+  content += "<a href='/info'>Info</a></body></html>";
+  smartLocker.server.send(200, "text/html", content);
     
 }
 
@@ -458,6 +477,10 @@ void setup() {
   Serial.begin(115200);
   Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
   smartLocker.Init("smart_locker", "12345678"); // AP settings
+  EEPROM.get(PROTO_STATE_ADDR, protoState);
+  if(protoState.mqtt_proto){
+    initMQTT(protoState.mqttServerIP, protoState.mqttServerPort);
+  }
   setup_routing(); 
   timeClient.begin();
   timeClient.update();
@@ -468,7 +491,7 @@ void setup() {
 
 void loop() {
   smartLocker.serverLoop();
-  if(mqtt_proto){
+  if(protoState.mqtt_proto){
     if(mqttClient.connected()){
       mqttClient.loop();
     }

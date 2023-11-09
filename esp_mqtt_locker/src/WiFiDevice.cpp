@@ -23,16 +23,9 @@ void WiFiDevice::Init(const char* ssid_AP, const char* password_AP){
         serverIP = WiFi.softAPIP();
         Serial.println(serverIP);
     }
-
     server.on("/", std::bind(&WiFiDevice::handleRoot, this));
     server.on("/login", std::bind(&WiFiDevice::handleLogin, this));
-
     server.onNotFound(std::bind(&WiFiDevice::handleNotFound, this));
-    //here the list of headers to be recorded
-    //const char * headerkeys[] = {"User-Agent", "Cookie"} ;
-    //size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
-    //ask server to track these headers
-    //server.collectHeaders(headerkeys, headerkeyssize);
     server.begin();
     Serial.println("HTTP server started");
 }
