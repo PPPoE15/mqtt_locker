@@ -149,14 +149,14 @@ void checkAllLockers(byte device_id){
 
   for (int i=2; i<9; i++){  // for each of the 7 byte in feedback message
     uint8_t status = allLockerstatus[i];
-    Serial.println( status );
+    //Serial.println( status );
     for (int j=7; j>=0; j--){  // for each of the 8 lockers in one byte
       if(status != status % (1 << j)){
         
         status %= (1 << j); 
         opened.add( (NUM_BYTES + 1 - i)*8 + j+1 );  // calculates num of the locker on the board
-        Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 ); 
-        Serial.println("");
+        //Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 ); 
+        //Serial.println("");
       }
     }
   }
@@ -312,12 +312,12 @@ void reconnect() {
   Serial.println("Enter reconnect");
   while (!mqttClient.connected()) {
     Serial.println("Attempting MQTT connection...");
-    if (mqttClient.connect("ESP32_clientID")) {
+    if (mqttClient.connect("LockerController")) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      //mqttClient.publish("locker/outTopic", "Nodemcu connected to MQTT");
+      mqttClient.publish("locker/outTopic", "Nodemcu connected to MQTT");
       // ... and resubscribe
-      //mqttClient.subscribe(control_topic);
+      mqttClient.subscribe(control_topic);
 
     } else {
       Serial.print("failed, rc=");
@@ -330,15 +330,15 @@ void reconnect() {
 
 void connectmqtt()
 {
-  mqttClient.connect("ESP32_clientID");  // ESP will connect to mqtt broker with clientID
+  mqttClient.connect("LockerController");  // ESP will connect to mqtt broker with clientID
   {
     Serial.println("connected to MQTT");
     // Once connected, publish an announcement...
 
     // ... and resubscribe
-    //mqttClient.subscribe(control_topic); 
-    //mqttClient.publish("locker/outTopic",  "connected to MQTT");
-    //mqttClient.publish("locker/locker_status", "check");
+    mqttClient.subscribe(control_topic); 
+    mqttClient.publish("locker/outTopic",  "connected to MQTT");
+    mqttClient.publish("locker/locker_status", "check");
 
     if (!mqttClient.connected())
     {
@@ -384,11 +384,11 @@ void callback(String& topic, String& payload) {   //callback includes topic and 
 
   if(feedback[3] == 0x11)  // check is successful unlocking
   {  
-    //mqttClient.publish(feedback_topic, "open");
+    mqttClient.publish(feedback_topic, "open");
   }
   else 
   {
-    //mqttClient.publish(feedback_topic, "closed");
+    mqttClient.publish(feedback_topic, "closed");
   } 
 }
 
