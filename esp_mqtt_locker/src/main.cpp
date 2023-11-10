@@ -1,12 +1,13 @@
 // TODO: 
-
-// 2. error handler
+// 1. error handler
 
 
 #include <WiFiDevice.h>
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <Random16.h>
+#include <PubSubClient.h>
+
 
 
 #define RXD2 18 // uart1 pins for locker control
@@ -18,23 +19,34 @@
 #define statusCode   0x33
 
 #define numLockersOnPlate 50
-#define numPlates 1
+#define NUM_PLATES 1
 #define NUM_BYTES 7
 
+#define EMG_PIN 5
+#define PROTO_STATE_ADDR 100
+struct ProtoState{
+  bool api_proto = true;
+  bool mqtt_proto = false;
+  char mqttServerIP[16];
+  uint16_t mqttServerPort = 1883;
+}protoState;
 
+
+
+const char* control_topic = "locker/control"; // to subscribe
+const char* feedback_topic = "locker/locker_status"; // to publish
 
 //LIIS password   qw8J*883
 
 WiFiDevice smartLocker;
+WiFiClient LockerClient;
+PubSubClient mqttClient(LockerClient);
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
-
 WiFiUDP ntpUDP; 
 NTPClient timeClient(ntpUDP,"0.pool.ntp.org", 10800, 60000);
-
 String bearer;
-
 Random16 rnd; //Более легкий рандом чем оригинальная библиотека
 
 class Message
@@ -92,6 +104,44 @@ class Message
 
 
 
+class button {
+    public:
+        button (byte pin) {
+            _pin = pin;
+            pinMode(_pin, INPUT_PULLUP);
+            pinMode(LED_BUILTIN, OUTPUT);
+        }
+        
+        bool click() {
+            bool btnState = digitalRead(_pin);
+            if (!btnState && !_flag && millis() - _tmr >= 100) {
+                _flag = true;
+                _tmr = millis();
+                return true;
+            }
+            if (!btnState && _flag && millis() - _tmr >= 3000) {
+                _tmr = millis ();
+                emergencyOpen();
+                return true;
+            }
+            if (btnState && _flag) {
+                _flag = false;
+                _tmr = millis();
+            }
+            return false;
+        }
+
+    private:
+        byte _pin;
+        uint32_t _tmr;
+        bool _flag;
+        void emergencyOpen(){
+          for (int i=0; i < NUM_PLATES; i++){
+            Message event2("open", i);
+          }
+        }
+}emgButton(EMG_PIN);
+
 
 void checkAllLockers(byte device_id){
   jsonDocument.clear();
@@ -102,14 +152,14 @@ void checkAllLockers(byte device_id){
 
   for (int i=2; i<9; i++){  // for each of the 7 byte in feedback message
     uint8_t status = allLockerstatus[i];
-    Serial.println( status );
+    //Serial.println( status );
     for (int j=7; j>=0; j--){  // for each of the 8 lockers in one byte
       if(status != status % (1 << j)){
         
         status %= (1 << j); 
         opened.add( (NUM_BYTES + 1 - i)*8 + j+1 );  // calculates num of the locker on the board
-        Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 ); 
-        Serial.println("");
+        //Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 ); 
+        //Serial.println("");
       }
     }
   }
@@ -221,7 +271,12 @@ void create_json_response(String status, int task_id) { //функция отв�
   serializeJson(jsonDocument, buffer); 
 }
 
-
+void getVersion(){
+  jsonDocument.clear();
+  jsonDocument["version"] = "1.8";
+  serializeJson(jsonDocument, buffer);
+  smartLocker.server.send(200, "application/json", buffer);
+}
 
 void deviceTasks(){
   if (smartLocker.server.hasArg("plain") == false) {
@@ -256,12 +311,165 @@ void deviceTasks(){
   } 
 }
 
+void reconnect() {
+  Serial.println("Enter reconnect");
+  while (!mqttClient.connected()) {
+    Serial.println("Attempting MQTT connection...");
+    if (mqttClient.connect("LockerController")) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      mqttClient.publish("locker/outTopic", "Nodemcu connected to MQTT");
+      // ... and resubscribe
+      mqttClient.subscribe(control_topic);
+
+    } else {
+      //Serial.print("failed, rc=");
+      //Serial.println(" try again in 1 seconds");
+      // Wait 1 seconds before retrying
+      delay(1000);
+    }
+  }
+}
+
+void connectmqtt()
+{
+  mqttClient.connect("LockerController");  // ESP will connect to mqtt broker with clientID
+  {
+    Serial.println("connected to MQTT");
+    // Once connected, publish an announcement...
+
+    // ... and resubscribe
+    mqttClient.subscribe(control_topic); 
+    mqttClient.publish("locker/outTopic",  "connected to MQTT");
+    mqttClient.publish("locker/locker_status", "check");
+
+    if (!mqttClient.connected())
+    {
+      Serial.println("Reconecting...");
+      reconnect();
+    }
+  }
+}
+
+void messageDecoder(const byte* payload, byte* feedback){
+  byte plate_addr;
+  byte lock_addr;
+
+  if (payload[1] == ';')  // determinating plate addres
+  {  
+    plate_addr = payload[0] - 0x30;
+    if (payload[3] == ';')  // determinating locker addres
+    { 
+    lock_addr = payload[2] - 0x30;
+    } else{
+      lock_addr = payload[3] - 0x30 + (payload[2] - 0x30) * 10;
+    }
+  } 
+  else 
+  {
+    plate_addr = payload[1] - 0x30 + (payload[0] - 0x30) * 10;
+    if (payload[4] == ';')  // determinating locker addres
+    { 
+    lock_addr = payload[3] - 0x30;
+    } 
+    else
+    {
+     lock_addr = payload[4] - 0x30 + (payload[3] - 0x30) * 10;
+    }
+  }
+
+  Message mqttMessage("open", plate_addr, lock_addr, feedback);
+}
+
+void callback(char* topic, byte* payload, unsigned int lenght) {   //callback includes topic and payload ( from which (topic) the payload is comming)
+  byte feedback[5];
+  messageDecoder(payload, feedback);
+
+  if(feedback[3] == 0x11)  // check is successful unlocking
+  {  
+    mqttClient.publish(feedback_topic, "open");
+  }
+  else 
+  {
+    mqttClient.publish(feedback_topic, "closed");
+  } 
+}
+
+void initMQTT(char* serverIP, uint16_t serverPort){
+  Serial.println("trying to connect to MQTT");
+  Serial.println(serverIP);
+  Serial.println(serverPort);
+  mqttClient.setServer(serverIP, serverPort);
+  mqttClient.setCallback(callback);
+
+  while (!mqttClient.connect("LockerController")) {
+    Serial.print(".");
+    delay(500);
+  }
+  delay(500);
+  connectmqtt();
+}
+
+
+
+
+void settingsHandler(){
+  if(smartLocker.server.hasArg("api_proto")){
+    Serial.println(smartLocker.server.arg("api_proto"));
+    protoState.api_proto = true;  
+  } 
+  else{
+    protoState.api_proto = false;
+  }
+  if(smartLocker.server.hasArg("mqtt_proto")){
+    Serial.println(smartLocker.server.arg("mqtt_proto"));
+    protoState.mqtt_proto = true;
+    if(smartLocker.server.hasArg("mqttIP") & smartLocker.server.arg("mqttIP") != ""){
+      String str = smartLocker.server.arg("mqttIP");
+      str.toCharArray(protoState.mqttServerIP, 16);
+    }
+    if(smartLocker.server.hasArg("mqttPort") & smartLocker.server.arg("mqttPort") != ""){
+      protoState.mqttServerPort = smartLocker.server.arg("mqttPort").toInt();
+    }
+    initMQTT(protoState.mqttServerIP, protoState.mqttServerPort);
+  }
+  else{
+    protoState.mqtt_proto = false;
+  }
+  EEPROM.put(PROTO_STATE_ADDR, protoState);
+  EEPROM.commit();
+  
+  Serial.println(protoState.api_proto);
+  Serial.println(protoState.mqtt_proto);
+  String apiChecked = "checked";
+  if(!protoState.api_proto){
+    apiChecked = "";
+  }
+  String mqttChecked = "";
+  if(protoState.mqtt_proto){
+    mqttChecked = "checked";
+  }
+
+
+  String content = "<html><body><form action='/settings' method='POST'><br>";
+  content += "<br>API enabled by default<br>";
+  content += "<input type='checkbox' id='api' name='api_proto' value='api'" + apiChecked + "/> <label for='api'>api</label> <br>";
+  content += "<input type='checkbox' id='mqtt' name='mqtt_proto' value='mqtt'" + mqttChecked + "/> <label for='mqtt'>mqtt</label> <br>";
+  content += "MQTT broker IP:<input type='text' name='mqttIP' placeholder='0.0.0.0'><br>";
+  content += "MQTT broker port:<input type='text' name='mqttPort' placeholder='1883'><br>";
+  content += "<input type='submit' name='SUBMIT' value='Submit'></form> <br>";
+  content += "<a href='/info'>Info</a></body></html>";
+  smartLocker.server.send(200, "text/html", content);
+    
+}
 
 
 void setup_routing() { 
   smartLocker.addHandler("/api/Login", HTTP_POST, logined);
   smartLocker.addHandler("/api/DeviceTasks", HTTP_PUT, deviceTasks);
-}
+  smartLocker.addHandler("/settings", settingsHandler);
+  smartLocker.addHandler("/api/GetVersion", HTTP_GET, getVersion);
+} 
 
 
 
@@ -269,35 +477,49 @@ void setup() {
   Serial.begin(115200);
   Serial1.begin(9600, SERIAL_8N1, RXD2, TXD2);
   smartLocker.Init("smart_locker", "12345678"); // AP settings
+  EEPROM.get(PROTO_STATE_ADDR, protoState);
+  if(protoState.mqtt_proto){
+    initMQTT(protoState.mqttServerIP, protoState.mqttServerPort);
+  }
   setup_routing(); 
   timeClient.begin();
   timeClient.update();
-  bearer = generateRandomString(60); // initial generating berear token
-  Serial.println(smartLocker.getIP());
+  bearer = generateRandomString(60); // initial generating berear token 
 }
 
 
 
 void loop() {
-
   smartLocker.serverLoop();
+  if(protoState.mqtt_proto){
+    if(mqttClient.connected()){
+      mqttClient.loop();
+    }
+    else{
+      reconnect();
+    }
+  }
 
   static uint32_t tmrgetTime;
-    if (millis() - tmrgetTime >= 60000)
-   {
-      tmrgetTime = millis(); 
-      String time = timeClient.getFormattedTime();
-      //Serial.println("Time: " + time);
-   }
+  if (millis() - tmrgetTime >= 60000){
+    tmrgetTime = millis(); 
+    String time = timeClient.getFormattedTime();
+    //Serial.println("Time: " + time);
+  }
 
   static uint32_t flushTmr;
-  if (millis() - flushTmr >= 300) // clear uart buffer
-  {
+  if (millis() - flushTmr >= 300){ // clear uart buffer
     flushTmr = millis(); 
     while(Serial1.available()){
       Serial1.read();
     }
 
+  }
+
+  static uint32_t emgButtonTmr;
+  if (millis() - emgButtonTmr >= 300){ // clear uart buffer
+    emgButtonTmr = millis(); 
+    emgButton.click();
   }
 
 }

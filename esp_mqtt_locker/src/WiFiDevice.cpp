@@ -16,26 +16,16 @@ void WiFiDevice::Init(const char* ssid_AP, const char* password_AP){
     if (!doConnect(inputData)){ // trying to connect to wi-fi
         Serial.println("\n\nConfiguring access point..."); // if canceled open wi-fi acces point
         if (!WiFi.softAP(ssid_AP, password_AP)) {
-        log_e("Soft AP creation failed.");
-        while(1);
+            log_e("Soft AP creation failed.");
+            while(1);
         }
         Serial.print("AP IP address: ");
         serverIP = WiFi.softAPIP();
         Serial.println(serverIP);
     }
-
     server.on("/", std::bind(&WiFiDevice::handleRoot, this));
     server.on("/login", std::bind(&WiFiDevice::handleLogin, this));
-    server.on("/inline", [&]() {
-        server.send(200, "text/plain", "Necessary information about device");
-    });
-
     server.onNotFound(std::bind(&WiFiDevice::handleNotFound, this));
-    //here the list of headers to be recorded
-    const char * headerkeys[] = {"User-Agent", "Cookie"} ;
-    size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
-    //ask server to track these headers
-    server.collectHeaders(headerkeys, headerkeyssize);
     server.begin();
     Serial.println("HTTP server started");
 }
@@ -72,6 +62,7 @@ void WiFiDevice::offFlagValid(WiFiDataStruct _inputData) { // call if need to of
     EEPROM.commit();
 }
 
+
 bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
     if(!_inputData.isValid){
         Serial.println("Not valid SSID or PASSWORD");
@@ -79,23 +70,23 @@ bool WiFiDevice::doConnect(WiFiDataStruct _inputData){
     }
     Serial.println("Trying to connect...");
     WiFi.begin(_inputData.input_ssid, _inputData.input_pass);
-    WiFi.setAutoReconnect(true);
     Serial.println("");
-
-    for(int i=0; i < 60; i++){
-        if(WiFi.status() == WL_CONNECTED){ 
-            Serial.println("\n");
-            Serial.print("Connected to ");
-            Serial.println(_inputData.input_ssid);
-            Serial.print("IP address: ");
-            serverIP = WiFi.localIP();
-            Serial.println(serverIP);
-            return true;
-        }
+    uint32_t resetTmr;
+    while(WiFi.status() != WL_CONNECTED){
+        if (millis() - resetTmr >= 500) {   // 2 times at second - reset button handler
+            resetTmr = millis();             
+            resetButton.click(inputData);
+        }  
         delay(500);
         Serial.print(".");
     }
-    return false;
+    Serial.println("\n");
+    Serial.print("Connected to ");
+    Serial.println(_inputData.input_ssid);
+    Serial.print("IP address: ");
+    serverIP = WiFi.localIP();
+    Serial.println(serverIP);
+    return true;
 }
 
 void WiFiDevice::handleLogin() { //login page, also called for disconnect
@@ -120,7 +111,7 @@ void WiFiDevice::handleLogin() { //login page, also called for disconnect
     content += "SSID name:<input type='text' name='SSID' placeholder='SSID'><br>";
     content += "Password:<input type='password' name='PASSWORD' placeholder='password'><br>";
     content += "<input type='submit' name='SUBMIT' value='Submit'></form>" + msg + "<br>";
-    content += "<a href='/inline'>Info</a></body></html>";
+    content += "<a href='/info'>Info</a></body></html>";
     server.send(200, "text/html", content);
 }
 
@@ -133,7 +124,7 @@ void WiFiDevice::handleRoot() { //root page can be accessed only if authentifica
     }
     String content = "<html><body><H2>You successfully connected to Wi-Fi!</H2><br>";
     content += "To reset Wi-Fi settings push and hold reset button for 3 sec, then restart device <br>";
-    content += "<a href='/inline'>Info</a></body></html>";
+    content += "<a href='/info'>Info</a></body></html>";
     server.send(200, "text/html", content);
 }
 
