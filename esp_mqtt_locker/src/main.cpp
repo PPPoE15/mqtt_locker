@@ -6,7 +6,8 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <Random16.h>
-#include <PubSubClient.h>
+
+#include "MQTT_Proto.h"
 
 
 
@@ -33,14 +34,13 @@ struct ProtoState{
 
 
 
-const char* control_topic = "locker/control"; // to subscribe
-const char* feedback_topic = "locker/locker_status"; // to publish
+
 
 //LIIS password   qw8J*883
 
 WiFiDevice smartLocker;
-WiFiClient LockerClient;
-PubSubClient mqttClient(LockerClient);
+
+
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
@@ -49,58 +49,7 @@ NTPClient timeClient(ntpUDP,"0.pool.ntp.org", 10800, 60000);
 String bearer;
 Random16 rnd; //Более легкий рандом чем оригинальная библиотека
 
-class Message
-{
-  public:
-    Message(String type, byte plate, byte lock, byte* feedback){
-      clearSerial();
 
-      if(type == "open") { create_message(0x8A, plate, lock, 0x11);}
-      else { create_message(0x80, plate, lock, 0x33); }
-
-      Serial1.write(_message, 5);
-      delay(50);
-      Serial1.read(feedback, 11);
-      delay(50);
-    }
-
-    Message(String type, byte plate, byte* feedback){
-      clearSerial();
-
-      if(type == "open") { create_message(0x8A, plate, 0, 0x11);}
-      else { create_message(0x80, plate, 0, 0x33); }
-
-      Serial1.write(_message, 5);
-      delay(50);
-      Serial1.read(feedback, 11);
-      delay(50);
-    }
-
-    Message(String type, byte plate){
-      clearSerial();
-      if(type == "open") { create_message(0x8A, plate, 0, 0x11);}
-      else { create_message(0x80, plate, 0, 0x33); }
-
-      Serial1.write(_message, 5);
-    }
-
-  private:
-    byte _message[5];
-    void create_message(byte header, byte plate_addr, byte lock_addr, byte function_code){
-      _message[0] = header;
-      _message[1] = plate_addr;
-      _message[2] = lock_addr;
-      _message[3] = function_code;
-      _message[4] = _message[0] ^ _message[1] ^ _message[2] ^ _message[3];
-    }
-
-    void clearSerial(){
-      while(Serial1.available()){
-        Serial1.read();
-      }
-      delay(50);
-    }
-};
 
 
 
@@ -149,17 +98,13 @@ void checkAllLockers(byte device_id){
   uint8_t allLockerstatus[11];
   Message message("check", device_id, allLockerstatus);
 
-
   for (int i=2; i<9; i++){  // for each of the 7 byte in feedback message
     uint8_t status = allLockerstatus[i];
-    //Serial.println( status );
     for (int j=7; j>=0; j--){  // for each of the 8 lockers in one byte
       if(status != status % (1 << j)){
         
         status %= (1 << j); 
         opened.add( (NUM_BYTES + 1 - i)*8 + j+1 );  // calculates num of the locker on the board
-        //Serial.println( (NUM_BYTES + 1 - i)*8 + j+1 ); 
-        //Serial.println("");
       }
     }
   }
@@ -311,104 +256,7 @@ void deviceTasks(){
   } 
 }
 
-void reconnect() {
-  Serial.println("Enter reconnect");
-  while (!mqttClient.connected()) {
-    Serial.println("Attempting MQTT connection...");
-    if (mqttClient.connect("LockerController")) {
-      Serial.println("connected");
-      // Once connected, publish an announcement...
-      mqttClient.publish("locker/outTopic", "Nodemcu connected to MQTT");
-      // ... and resubscribe
-      mqttClient.subscribe(control_topic);
 
-    } else {
-      //Serial.print("failed, rc=");
-      //Serial.println(" try again in 1 seconds");
-      // Wait 1 seconds before retrying
-      delay(1000);
-    }
-  }
-}
-
-void connectmqtt()
-{
-  mqttClient.connect("LockerController");  // ESP will connect to mqtt broker with clientID
-  {
-    Serial.println("connected to MQTT");
-    // Once connected, publish an announcement...
-
-    // ... and resubscribe
-    mqttClient.subscribe(control_topic); 
-    mqttClient.publish("locker/outTopic",  "connected to MQTT");
-    mqttClient.publish("locker/locker_status", "check");
-
-    if (!mqttClient.connected())
-    {
-      Serial.println("Reconecting...");
-      reconnect();
-    }
-  }
-}
-
-void messageDecoder(const byte* payload, byte* feedback){
-  byte plate_addr;
-  byte lock_addr;
-
-  if (payload[1] == ';')  // determinating plate addres
-  {  
-    plate_addr = payload[0] - 0x30;
-    if (payload[3] == ';')  // determinating locker addres
-    { 
-    lock_addr = payload[2] - 0x30;
-    } else{
-      lock_addr = payload[3] - 0x30 + (payload[2] - 0x30) * 10;
-    }
-  } 
-  else 
-  {
-    plate_addr = payload[1] - 0x30 + (payload[0] - 0x30) * 10;
-    if (payload[4] == ';')  // determinating locker addres
-    { 
-    lock_addr = payload[3] - 0x30;
-    } 
-    else
-    {
-     lock_addr = payload[4] - 0x30 + (payload[3] - 0x30) * 10;
-    }
-  }
-
-  Message mqttMessage("open", plate_addr, lock_addr, feedback);
-}
-
-void callback(char* topic, byte* payload, unsigned int lenght) {   //callback includes topic and payload ( from which (topic) the payload is comming)
-  byte feedback[5];
-  messageDecoder(payload, feedback);
-
-  if(feedback[3] == 0x11)  // check is successful unlocking
-  {  
-    mqttClient.publish(feedback_topic, "open");
-  }
-  else 
-  {
-    mqttClient.publish(feedback_topic, "closed");
-  } 
-}
-
-void initMQTT(char* serverIP, uint16_t serverPort){
-  Serial.println("trying to connect to MQTT");
-  Serial.println(serverIP);
-  Serial.println(serverPort);
-  mqttClient.setServer(serverIP, serverPort);
-  mqttClient.setCallback(callback);
-
-  while (!mqttClient.connect("LockerController")) {
-    Serial.print(".");
-    delay(500);
-  }
-  delay(500);
-  connectmqtt();
-}
 
 
 
