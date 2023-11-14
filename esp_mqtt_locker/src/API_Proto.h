@@ -4,9 +4,9 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <Random16.h>
-#include "ClassMessage.h"
-#include "WiFiDevice.h"
 #include "Config.h"
+
+
 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];

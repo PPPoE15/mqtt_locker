@@ -1,6 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include "WiFiDevice.h"
+#include "ClassMessage.h"
+
 #define RXD2 18 // uart1 pins for locker control
 #define TXD2 19
 
