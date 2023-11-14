@@ -4,8 +4,8 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 #include <Random16.h>
-#include "Config.h"
 
+#include "Config.h"
 
 
 StaticJsonDocument<250> jsonDocument;

@@ -2,6 +2,7 @@
 #define CLASS_MESSAGE_H
 
 #include <Arduino.h>
+
 class Message
 {
   public:

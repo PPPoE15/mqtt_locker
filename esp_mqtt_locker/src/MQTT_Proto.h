@@ -2,7 +2,9 @@
 #define MQTT_PROTO_H
 
 #include <PubSubClient.h>
+
 #include "Config.h"
+
 WiFiClient LockerClient;
 PubSubClient mqttClient(LockerClient);
 
