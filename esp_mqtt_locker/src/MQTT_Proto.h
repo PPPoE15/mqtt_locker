@@ -12,8 +12,8 @@ const char* control_topic = "locker/control"; // to subscribe
 const char* feedback_topic = "locker/locker_status"; // to publish
 
 void reconnect() {
-  Serial.println("Enter reconnect");
-  while (!mqttClient.connected()) {
+  //Serial.println("Enter reconnect");
+  if (!mqttClient.connected()) {
     Serial.println("Attempting MQTT connection...");
     if (mqttClient.connect("LockerController")) {
       Serial.println("connected");
@@ -24,7 +24,7 @@ void reconnect() {
 
     } else {
       //Serial.print("failed, rc=");
-      //Serial.println(" try again in 1 seconds");
+      Serial.println(" try again later");
       // Wait 1 seconds before retrying
       delay(1000);
     }

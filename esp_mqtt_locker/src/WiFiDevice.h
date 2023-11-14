@@ -46,6 +46,7 @@ class WiFiDevice{
         void addHandler(Uri uri, WebServer::THandlerFunction Handler);
         void addHandler(Uri uri, http_method method, WebServer::THandlerFunction Handler);
         IPAddress getIP();
+        void reconnectWiFi();
 
     private:
         static void offFlagValid(WiFiDataStruct _inputData);

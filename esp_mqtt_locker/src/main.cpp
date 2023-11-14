@@ -3,7 +3,6 @@
 
 #include "Worker.h"
 
-//LIIS password   qw8J*883
 
 void setup() {
   Serial.begin(115200);
@@ -21,8 +20,16 @@ void setup() {
 
 
 void loop() {
-  smartLocker.serverLoop();
-  if(protoState.mqtt_proto){
+  // server and API loop
+  smartLocker.serverLoop(); 
+
+  if (WiFi.status() != WL_CONNECTED) {
+    smartLocker.reconnectWiFi();
+    Serial.println("Reconnect to Wi-Fi");
+  }
+
+  // MQTT loop
+  if(protoState.mqtt_proto){ 
     if(mqttClient.connected()){
       mqttClient.loop();
     }
@@ -31,6 +38,7 @@ void loop() {
     }
   }
 
+  // RTC loop
   static uint32_t tmrgetTime;
   if (millis() - tmrgetTime >= 60000){
     tmrgetTime = millis(); 
@@ -38,17 +46,18 @@ void loop() {
     //Serial.println("Time: " + time);
   }
 
+  // UART cleaning
   static uint32_t flushTmr;
   if (millis() - flushTmr >= 300){ // clear uart buffer
     flushTmr = millis(); 
     while(Serial1.available()){
       Serial1.read();
     }
-
   }
 
+  // Emergency button handler
   static uint32_t emgButtonTmr;
-  if (millis() - emgButtonTmr >= 300){ // clear uart buffer
+  if (millis() - emgButtonTmr >= 300){ 
     emgButtonTmr = millis(); 
     emgButton.click();
   }

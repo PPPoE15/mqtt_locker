@@ -30,6 +30,10 @@ void WiFiDevice::Init(const char* ssid_AP, const char* password_AP){
     Serial.println("HTTP server started");
 }
 
+void WiFiDevice::reconnectWiFi(){
+    WiFi.begin(inputData.input_ssid, inputData.input_pass);
+}
+
 void WiFiDevice::addHandler(Uri uri, WebServer::THandlerFunction Handler){
     server.on(uri, Handler);
 }
