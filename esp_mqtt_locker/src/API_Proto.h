@@ -154,12 +154,12 @@ void deviceTasks(){
   String token;
   if (smartLocker.server.hasHeader("Authorization")) {
     String authHeader = smartLocker.server.header("Authorization");
-    Serial.println("Authorization Header: " + authHeader);
+    //Serial.println("Authorization Header: " + authHeader);
     
     // Разбор значения токена
     if (authHeader.startsWith("Bearer ")) {
       token = authHeader.substring(7); // Извлекаем часть после "Bearer "
-      Serial.println("Bearer Token: " + token);
+      //Serial.println("Bearer Token: " + token);
     }
   }
   if (token == bearer){

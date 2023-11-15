@@ -63,12 +63,29 @@ void settingsHandler(){
     
 }
 
+void webControl(){
+  if (smartLocker.server.hasArg("Plate") && smartLocker.server.hasArg("Lock")) {   
+      String plate = smartLocker.server.arg("Plate");
+      String lock = smartLocker.server.arg("Lock");
+      Message webControlMsg((byte) plate.toInt(), (byte) lock.toInt());
+  }
+
+  String content = "<html><body><form action='/control'><br>";
+  content += "<br>Enter plate number and locker number to open<br>";
+  content += "Plate number:<input type='text' name='Plate' placeholder='0'><br>";
+  content += "Locker number:<input type='text' name='Lock' placeholder='1'><br>";
+  content += "<input type='submit' name='OPEN' value='OPEN'></form> <br>";
+  content += "<a href='/info'>Info</a></body></html>";
+  smartLocker.server.send(200, "text/html", content);
+}
+
 
 void setup_routing() { 
   smartLocker.addHandler("/api/Login", HTTP_POST, logined);
   smartLocker.addHandler("/api/DeviceTasks", HTTP_PUT, deviceTasks);
   smartLocker.addHandler("/settings", settingsHandler);
   smartLocker.addHandler("/api/GetVersion", HTTP_GET, getVersion);
+  smartLocker.addHandler("/control", webControl);
 } 
 
 #endif // WORKER_H

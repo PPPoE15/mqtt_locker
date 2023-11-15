@@ -18,6 +18,13 @@ class Message
       delay(50);
     }
 
+    Message(byte plate, byte lock){ // control witout feedback
+      clearSerial();
+      create_message(0x8A, plate, lock, 0x11);
+      Serial1.write(_message, 5);
+      delay(50);
+    }
+
     Message(String type, byte plate, byte* feedback){
       clearSerial();
 
