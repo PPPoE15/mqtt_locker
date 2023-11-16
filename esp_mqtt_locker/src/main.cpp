@@ -21,7 +21,9 @@ void setup() {
 
 void loop() {
   // server and API loop
+  uint32_t traceTmr = millis();
   smartLocker.serverLoop(); 
+  
 
   if (WiFi.status() != WL_CONNECTED) {
     smartLocker.reconnectWiFi();
@@ -38,22 +40,8 @@ void loop() {
     }
   }
 
-  // RTC loop
-  static uint32_t tmrgetTime;
-  if (millis() - tmrgetTime >= 60000){
-    tmrgetTime = millis(); 
-    String time = timeClient.getFormattedTime();
-    //Serial.println("Time: " + time);
-  }
 
-  // UART cleaning
-  static uint32_t flushTmr;
-  if (millis() - flushTmr >= 300){ // clear uart buffer
-    flushTmr = millis(); 
-    while(Serial1.available()){
-      Serial1.read();
-    }
-  }
+  
 
   // Emergency button handler
   static uint32_t emgButtonTmr;
@@ -62,5 +50,29 @@ void loop() {
     emgButton.click();
   }
 
+  traceTmr = millis() - traceTmr;
+  if(traceTmr > 5){
+    Serial.println(traceTmr);
+  }
+
 }
 
+/*
+// RTC loop
+  static uint32_t tmrgetTime;
+  if (millis() - tmrgetTime >= 60000){
+    tmrgetTime = millis(); 
+    String time = timeClient.getFormattedTime();
+    //Serial.println("Time: " + time);
+  }
+
+// UART cleaning
+  static uint32_t flushTmr;
+  if (millis() - flushTmr >= 300){ // clear uart buffer
+    flushTmr = millis(); 
+    while(Serial1.available()){
+      Serial1.read();
+    }
+  }
+  
+*/

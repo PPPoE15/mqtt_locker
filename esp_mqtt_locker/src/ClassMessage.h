@@ -15,17 +15,17 @@ class Message
       Serial1.write(_message, 5);
       delay(50);
       Serial1.read(feedback, 11);
-      delay(50);
+      //delay(50);
     }
 
-    Message(byte plate, byte lock){ // control witout feedback
+    Message(byte plate, byte lock){ // control without feedback
       clearSerial();
       create_message(0x8A, plate, lock, 0x11);
       Serial1.write(_message, 5);
-      delay(50);
+      //delay(50);
     }
 
-    Message(String type, byte plate, byte* feedback){
+    Message(String type, byte plate, byte* feedback){ // maybe should to remove
       clearSerial();
 
       if(type == "open") { create_message(0x8A, plate, 0, 0x11);}
@@ -34,7 +34,7 @@ class Message
       Serial1.write(_message, 5);
       delay(50);
       Serial1.read(feedback, 11);
-      delay(50);
+      //delay(50);
     }
 
     Message(String type, byte plate){
@@ -59,7 +59,7 @@ class Message
       while(Serial1.available()){
         Serial1.read();
       }
-      delay(50);
+      //delay(50);
     }
 };
 
